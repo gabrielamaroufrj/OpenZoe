@@ -5,6 +5,7 @@
 ![Status](https://img.shields.io/badge/Status-Em_Desenvolvimento-yellow)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
+[![Apoie com Pix](https://img.shields.io/badge/Apoie%20com-Pix-32BCAD?style=for-the-badge&logo=pix&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/blob/main/PIX.md)
 
 O **OpenZoe** é uma aplicação desktop desenvolvida para auxiliar Físicos Médicos e profissionais de radiologia no monitoramento de doses de radiação. O sistema processa arquivos **DICOM SR (Structured Report)**, centraliza os dados em um banco local e oferece ferramentas visuais para análise de indicadores de qualidade e segurança do paciente.
 
