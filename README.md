@@ -65,5 +65,5 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 
 1. **Clone o repositório:**
    ```bash
-   git clone [https://github.com/gabrielamaroufrj/OpenZoe.git](https://github.com/gabrielamaroufrj/OpenZoe.git)
+   git clone https://github.com/gabrielamaroufrj/OpenZoe.git
    cd OpenZoe
