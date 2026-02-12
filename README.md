@@ -4,6 +4,7 @@
 ![Dashboard do OpenZoe](assets/evolucao_temporal.png)
 ![Status](https://img.shields.io/badge/Status-Em_Desenvolvimento-yellow)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+[![AppImage](https://img.shields.io/badge/AppImage-Linux-blue?style=for-the-badge&logo=appimage&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/releases)
 ![License](https://img.shields.io/badge/License-MIT-green)
 [![Apoie com Pix](https://img.shields.io/badge/Apoie%20com-Pix-32BCAD?style=for-the-badge&logo=pix&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/blob/main/PIX.md)
 
