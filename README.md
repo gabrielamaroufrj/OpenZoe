@@ -1,7 +1,8 @@
+![OpenZoe](assets/icon.png)
 # ☢️ OpenZoe
 
 > **Sistema de Gerenciamento e Análise de Doses em Radiologia (DICOM SR)**
-
+![Dashboard do OpenZoe](assets/evolucao_temporal.png)
 ![Status](https://img.shields.io/badge/Status-Em_Desenvolvimento-yellow)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -29,6 +30,7 @@ Visualização intuitiva na tabela de dados com **código de cores** para nívei
 * 🟡 **3000 - 3999 mGy:** Alerta Amarelo
 * 🟠 **4000 - 4999 mGy:** Alerta Laranja
 * 🔴 **≥ 5000 mGy:** Alerta Vermelho (Nível Crítico)
+![Dashboard do OpenZoe](assets/dados.png)
 
 ### 3. 📊 Dashboards Interativos
 Visualização gráfica para tomada de decisão rápida:
@@ -37,7 +39,7 @@ Visualização gráfica para tomada de decisão rápida:
 * **Análise por Procedimento:** Média de dose e tempo por tipo de exame.
 * **Linhas de Referência:** Indicadores visuais nos gráficos para limites de controle (ex: 1000 mGy).
 * **Exportação:** Salve os gráficos gerados como imagem (PNG) de alta resolução.
-
+![Gráficos OpenZoe](assets/dose_exame.png)
 ### 4. ⚙️ Gestão e Configuração
 * **Banco de Dados Local (SQLite):** Armazenamento seguro sem necessidade de servidores complexos.
 * **CRUD Completo:** Adicione, edite ou remova registros manualmente se necessário.
