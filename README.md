@@ -1,12 +1,13 @@
 ![OpenZoe](assets/icon.png)
 # ☢️ OpenZoe
 
-> **Sistema de Gerenciamento e Análise de Doses em Radiologia (DICOM SR)**
 ![Dashboard do OpenZoe](assets/evolucao_temporal.png)
 ![Status](https://img.shields.io/badge/Status-Em_Desenvolvimento-yellow)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 [![Apoie com Pix](https://img.shields.io/badge/Apoie%20com-Pix-32BCAD?style=for-the-badge&logo=pix&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/blob/main/PIX.md)
+
+> **Sistema de Gerenciamento e Análise de Doses em Radiologia (DICOM SR)**
 
 O **OpenZoe** é uma aplicação desktop desenvolvida para auxiliar Físicos Médicos e profissionais de radiologia no monitoramento de doses de radiação. O sistema processa arquivos **DICOM SR (Structured Report)**, centraliza os dados em um banco local e oferece ferramentas visuais para análise de indicadores de qualidade e segurança do paciente.
 
@@ -66,7 +67,23 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 
 ### Passo a Passo
 
-1. **Clone o repositório:**
+1. **Crie uma venv (Recomendado):**
+   ```bash
+   python -m venv .venv  
+   source .venv/bin/activate
+
+2. **Instale as bibliotecas:**
+   ```bash
+   pip install 'flet[all]'
+   pip install flet_charts
+   pip install matplotlib
+   pip install pydicom
+
+3. **Clone o repositório:**
    ```bash
    git clone https://github.com/gabrielamaroufrj/OpenZoe.git
    cd OpenZoe
+
+4. **Rode o main.py:**
+   ```bash
+   python main.py
