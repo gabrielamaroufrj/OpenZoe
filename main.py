@@ -171,6 +171,20 @@ def carregar_dados_banco(data_inicio, data_fim, min_d, max_d, n_medico, exm, min
     
     return dados, total_registros
 
+def criar_indices():
+    try:
+        conn = conectar()
+        if not conn: return
+        cursor = conn.cursor()
+        # Cria "atalhos" para busca rápida
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_data ON exames(data)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_medico ON exames(medico)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam ON exames(exam)")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Erro ao criar índices: {e}")
+
 # --- CSV ---
 
 def gerar_csv_string(apenas_filtrados=False, inputs_filtros=None):
@@ -304,32 +318,39 @@ def calcular_media_medico(data_inicio, data_fim, min_d, max_d, n_medico, exm, mi
 def calcular_media_tempo_medico(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac):
     try:
         conn = conectar()
+        if not conn: return []
         cursor = conn.cursor()
+        
         sql_where, params = montar_query_filtros(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac)
-        sql = f"SELECT medico, tempo {sql_where}"
+        
+        # Fórmula SQL para converter "HH:MM:SS" em Minutos (float)
+        # substr(tempo, 1, 2) = Horas
+        # substr(tempo, 4, 2) = Minutos
+        # substr(tempo, 7, 2) = Segundos
+        calc_minutos = "(CAST(substr(tempo, 1, 2) AS INTEGER) * 60 + CAST(substr(tempo, 4, 2) AS INTEGER) + CAST(substr(tempo, 7, 2) AS REAL)/60)"
+
+        sql = f"""
+            SELECT 
+                medico, 
+                AVG({calc_minutos}) as media,
+                MIN({calc_minutos}) as minimo,
+                MAX({calc_minutos}) as maximo,
+                COUNT(*) as qtd
+            {sql_where}
+            GROUP BY medico
+            ORDER BY media DESC
+        """
+        
         cursor.execute(sql, params)
-        rows = cursor.fetchall()
+        resultados = cursor.fetchall()
         conn.close()
+        
+        # Retorna lista no formato: [(Medico, Media, Min, Max, Qtd), ...]
+        return resultados
 
-        dados_agrupados = {}
-        for row in rows:
-            med = row[0] if row[0] else "N/A"
-            minutos = tempo_para_minutos(row[1])
-            if med not in dados_agrupados: dados_agrupados[med] = []
-            dados_agrupados[med].append(minutos)
-        
-        resultados = []
-        for med, tempos in dados_agrupados.items():
-            if tempos:
-                media = sum(tempos) / len(tempos)
-                resultados.append((med, media, min(tempos), max(tempos), len(tempos)))
-        
-        resultados.sort(key=lambda x: x[1], reverse=True)
-        return resultados[:] # Caso queira  que aparaça apenas o Top X maiores valores altere aqui!!!
     except Exception as e:
-        print(f"Erro Media Tempo: {e}")
+        print(f"Erro Media Tempo SQL: {e}")
         return []
-
 def calcular_media_exame(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac):
     resultados = []
     modo_multiplo = False
@@ -382,56 +403,50 @@ def calcular_media_tempo_exame(data_inicio, data_fim, min_d, max_d, n_medico, ex
 
     try:
         conn = conectar()
+        if not conn: return [], modo_multiplo
         cursor = conn.cursor()
+        
         sql_where, params = montar_query_filtros(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac)
         
+        # A mesma fórmula mágica de antes
+        calc_minutos = "(CAST(substr(tempo, 1, 2) AS INTEGER) * 60 + CAST(substr(tempo, 4, 2) AS INTEGER) + CAST(substr(tempo, 7, 2) AS REAL)/60)"
+
         if modo_multiplo:
-            sql = f"SELECT exam, medico, tempo {sql_where}"
+            # Agrupa por Exame E Médico
+            sql = f"""
+                SELECT 
+                    exam, 
+                    medico, 
+                    AVG({calc_minutos}) as media,
+                    MIN({calc_minutos}) as minimo,
+                    MAX({calc_minutos}) as maximo,
+                    COUNT(*) as qtd
+                {sql_where}
+                GROUP BY exam, medico
+                ORDER BY exam
+            """
         else:
-            sql = f"SELECT exam, tempo {sql_where}"
+            # Agrupa apenas por Exame
+            sql = f"""
+                SELECT 
+                    exam, 
+                    AVG({calc_minutos}) as media,
+                    MIN({calc_minutos}) as minimo,
+                    MAX({calc_minutos}) as maximo,
+                    COUNT(*) as qtd
+                {sql_where}
+                GROUP BY exam
+                ORDER BY media DESC
+            """ # Adicione LIMIT 6 aqui se quiser pegar apenas os top 6 exames mais demorados
             
         cursor.execute(sql, params)
-        rows = cursor.fetchall()
+        resultados = cursor.fetchall()
         conn.close()
-
-        dados_temp = {}
-
-        if modo_multiplo:
-            for row in rows:
-                ex = row[0] if row[0] else "N/A"
-                med = row[1] if row[1] else "N/A"
-                mins = tempo_para_minutos(row[2])
-                
-                if ex not in dados_temp: dados_temp[ex] = {}
-                if med not in dados_temp[ex]: dados_temp[ex][med] = []
-                dados_temp[ex][med].append(mins)
-            resultados = []
-            for ex in sorted(dados_temp.keys()):
-                for med in sorted(dados_temp[ex].keys()):
-                    vals = dados_temp[ex][med]
-                    if vals:
-                        media = sum(vals)/len(vals)
-                        resultados.append((ex, med, media, min(vals), max(vals), len(vals)))
-        else:
-            for row in rows:
-                ex = row[0] if row[0] else "N/A"
-                mins = tempo_para_minutos(row[1])
-                if ex not in dados_temp: dados_temp[ex] = []
-                dados_temp[ex].append(mins)
-            resultados = []
-            for ex in dados_temp:
-                vals = dados_temp[ex]
-                if vals:
-                    media = sum(vals)/len(vals)
-                    resultados.append((ex, media, min(vals), max(vals), len(vals)))
-            
-            resultados.sort(key=lambda x: x[1], reverse=True)
-            resultados = resultados[:] # Top 6
 
         return resultados, modo_multiplo
 
     except Exception as e:
-        print(f"Erro Media Tempo Exame: {e}")
+        print(f"Erro Media Tempo Exame SQL: {e}")
         return [], False
 
 # --- CRUD FUNCTIONS ---
@@ -597,10 +612,6 @@ def main(page: ft.Page):
         btn_tema.icon = ft.Icons.DARK_MODE if page.theme_mode == ft.ThemeMode.LIGHT else ft.Icons.LIGHT_MODE
         page.update()
 
-
-# Adicione btn_tema na sua linha de botões
-
-
     # --- HANDLERS (SELEÇÃO DE ARQUIVOS) ---
 
     async def handle_pick_files(e: ft.Event[ft.Button]):
@@ -608,8 +619,6 @@ def main(page: ft.Page):
         files = await ft.FilePicker().pick_files(allow_multiple=True)
         if files:
             FILE_PATH = files[0].path
-            
-            # Garante que a tabela com estrutura nova seja criada se arquivo for novo
             conn = conectar()
             cursor = conn.cursor()
             sql_create = """CREATE TABLE IF NOT EXISTS exames (
@@ -630,6 +639,7 @@ def main(page: ft.Page):
             cursor.execute(sql_create)
             conn.commit()
             conn.close()
+            criar_indices()
             atualizar_tudo()
             page.show_dialog(ft.SnackBar(ft.Text(f"Arquivo Selecionado: {FILE_PATH}"), bgcolor="green"))
         else:
@@ -685,18 +695,13 @@ def main(page: ft.Page):
 
     # --- handle CSV ---
 
-
     async def exportar_csv_completo(e: ft.Event[ft.Button]):
         texto_csv = gerar_csv_string(apenas_filtrados=False)
-        
         nome_arquivo = f"Relatorio_Completo_{datetime.datetime.now().strftime('%Y%m%d')}.csv"
-        
-        # AQUI ESTÁ A LÓGICA ASYNC QUE VOCÊ PEDIU
         resultado = await ft.FilePicker().save_file(file_name=nome_arquivo, allowed_extensions=["csv"])
         
         if resultado:
             try:
-                # utf-8-sig para acentos no Excel
                 with open(resultado, 'w', newline='', encoding='utf-8-sig') as f:
                     f.write(texto_csv)
                 page.show_dialog(ft.SnackBar(ft.Text("Relatório completo salvo!"), bgcolor="green"))
@@ -704,7 +709,6 @@ def main(page: ft.Page):
                 page.show_dialog(ft.SnackBar(ft.Text(f"Erro: {ex}"), bgcolor="red"))
 
     async def exportar_csv_filtrado(e: ft.Event[ft.Button]):
-        # Coleta os valores atuais dos inputs
         filtros_atuais = {
             'min_d': min_dose.value, 'max_d': max_dose.value,
             'med': medico_entry.value, 'exm': exame_entry.value,
@@ -722,8 +726,7 @@ def main(page: ft.Page):
         nome_arquivo = f"Relatorio_Filtrado_{datetime.datetime.now().strftime('%Y%m%d')}.csv"
         
         # LÓGICA ASYNC
-        resultado = await ft.FilePicker().save_file(file_name=nome_arquivo, allowed_extensions=["csv"])
-        
+        resultado = await ft.FilePicker().save_file(file_name=nome_arquivo, allowed_extensions=["csv"])   
         if resultado:
             try:
                 with open(resultado, 'w', newline='', encoding='utf-8-sig') as f:
@@ -747,7 +750,6 @@ def main(page: ft.Page):
                 return
 
             # 2. Separa X e Y
-            # Datas vêm como "YYYY-MM-DD", vamos formatar para "DD/MM"
             #eixo_x = [d[0][5:].replace("-", "/") for d in dados] 
             eixo_x = [d[0] for d in dados] 
             eixo_y = [d[1] for d in dados]
@@ -877,13 +879,13 @@ def main(page: ft.Page):
     def salvar_grafico_dose_exame():
         global directory_path
         try:
-            # 1. Busca os dados e o modo (REMOVI O [0] DO FINAL PARA PEGAR A TUPLA INTEIRA)
+            # 1. Busca os dados e o modo
             resultado = calcular_media_exame(data_inicio, data_final, min_dose.value, max_dose.value, 
                                          medico_entry.value, exame_entry.value, min_tempo_entry.value, 
                                          max_tempo_entry.value, min_dap_entry.value, max_dap_entry.value, sala_entry.value, sexo_entry.value, id_paciente_entry.value)
             
             dados = resultado[0]
-            modo_multiplo = resultado[1] # True se tiver mais de um médico
+            modo_multiplo = resultado[1]
             
             if not dados:
                 page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))
@@ -899,8 +901,7 @@ def main(page: ft.Page):
             #plt.legend()
 
             if not modo_multiplo:
-                # --- MODO SIMPLES (IGUAL ANTES) ---
-                # Dados: (Exame, Média, Min, Max, Qtd)
+                # --- MODO SIMPLES ---
                 eixo_x = [d[0] for d in dados] 
                 eixo_y = [d[1] for d in dados]
                 plt.bar(eixo_x, eixo_y, color='b')
@@ -908,8 +909,6 @@ def main(page: ft.Page):
             
             else:
                 # --- MODO MÚLTIPLO (BARRAS AGRUPADAS) ---
-                # Dados: (Exame, Médico, Média, Min, Max, Qtd)
-                
                 # 1. Identificar Exames e Médicos únicos
                 exames = sorted(list(set(d[0] for d in dados)))
                 medicos = sorted(list(set(d[1] for d in dados)))
@@ -918,12 +917,12 @@ def main(page: ft.Page):
                 n_exames = len(exames)
                 n_medicos = len(medicos)
                 largura_barra = 0.8 / n_medicos # Largura dinâmica
-                posicoes = list(range(n_exames)) # [0, 1, 2...]
+                posicoes = list(range(n_exames))
                 
                 # 3. Mapear dados para acesso rápido: dados_map[exame][medico] = valor
                 dados_map = {ex: {} for ex in exames}
                 for row in dados:
-                    dados_map[row[0]][row[1]] = row[2] # row[2] é a média no modo múltiplo
+                    dados_map[row[0]][row[1]] = row[2] 
 
                 # 4. Plotar uma série de barras para cada médico
                 # Cores para diferenciar (ciclando cores padrão do matplotlib)
@@ -932,10 +931,7 @@ def main(page: ft.Page):
                 for i, medico in enumerate(medicos):
                     valores = []
                     for exame in exames:
-                        # Pega o valor ou 0 se não existir para aquele médico/exame
                         valores.append(dados_map[exame].get(medico, 0))
-                    
-                    # Calcula posição deslocada: pos + (indice * largura)
                     pos_deslocada = [p + (i * largura_barra) for p in posicoes]
                     
                     plt.bar(pos_deslocada, valores, width=largura_barra, label=medico, color=cores[i % len(cores)])
@@ -983,14 +979,14 @@ def main(page: ft.Page):
             plt.figure(figsize=(12, 6))
 
             if not modo_multiplo:
-                # Modo Simples: (Exame, Tempo, ...)
+                # Modo Simples: 
                 eixo_x = [d[0] for d in dados] 
                 eixo_y = [d[1] for d in dados]
                 plt.bar(eixo_x, eixo_y, color='orange')
                 plt.xlabel("Exame")
             
             else:
-                # Modo Múltiplo: (Exame, Médico, Tempo, ...)
+                # Modo Múltiplo:
                 exames = sorted(list(set(d[0] for d in dados)))
                 medicos = sorted(list(set(d[1] for d in dados)))
                 
@@ -1059,7 +1055,6 @@ def main(page: ft.Page):
             texto_limpo = str(nome_dicom_raw).replace('^', ' ').strip()
 
             # 3. Divide o texto em uma lista de palavras
-            # Ex: "Gabriel Amaro 15" vira ['Gabriel', 'Amaro', '15']
             partes = texto_limpo.split()
 
             # 4. VARREDURA: Olha palavra por palavra
@@ -1093,7 +1088,6 @@ def main(page: ft.Page):
                             data_formatada = datetime.date.today().strftime("%Y-%m-%d")
                             
                         # 3. Extração de Valores
-                        # Inicializamos com 0.0 para poder somar (+=) sem erro de chave
                         metrics = {
                             "Dose": 0.0, 
                             "DAP": 0.0, 
@@ -1106,8 +1100,6 @@ def main(page: ft.Page):
                                 for it in seq:
                                     if hasattr(it, "ConceptNameCodeSequence"):
                                         c = it.ConceptNameCodeSequence[0].CodeValue
-                                        
-                                        # Verifica se tem valor numérico antes de tentar ler
                                         if hasattr(it, "MeasuredValueSequence"):
                                             valor = float(it.MeasuredValueSequence[0].NumericValue)
 
@@ -1144,14 +1136,9 @@ def main(page: ft.Page):
                         paciente_id = str(ds.get("PatientID", "0"))
                         sexo_raw = str(ds.get("PatientSex", "NI")).upper()
                         sexo = sexo_raw if sexo_raw in ["F", "M"] else "NI"
-                        
-                        # Tenta pegar descrição, se falhar pega o padrão DICOM
                         exame_nome = str(ds.get("AdmittingDiagnosesDescription", ds.get("StudyDescription", "NI")))
-                        
                         fabricante = ds.get("Manufacturer", "Desconhecido")
                         numero_serie = str(ds.get("DeviceSerialNumber", ""))
-
-                        # Inserir no banco
                         inserir_exame((data_formatada, medico_id, exame_nome, round(dose, 2), tempo_fmt, round(dap, 2), paciente_id, sexo, f"{fabricante}-{numero_serie}"))
                         atualizar_tudo()
                         page.show_dialog(ft.SnackBar(ft.Text(f"Importação Finalizada!"), bgcolor="green"))
@@ -1221,7 +1208,7 @@ def main(page: ft.Page):
         bottom_axis=fch.ChartAxis(
             label_size=40,
         ),
-        data_series=[] # Começa vazio
+        data_series=[] 
     )
     
     container_linha = ft.Container(
@@ -1261,235 +1248,230 @@ def main(page: ft.Page):
     drp = ft.DateRangePicker(start_value=datetime.datetime(year=today.year, month=today.month, day=1), end_value=datetime.datetime(year=today.year, month=today.month, day=15), on_change=handle_change)
     page.overlay.append(drp)
 
+    # --- FUNÇÕES AUXILIARES DE GRÁFICOS (MOVA PARA FORA) ---
+
+    def popular_grafico_simples(dados_tupla, grafico, cores, unit_suffix=""):
+        grp = []; lbl_x = []; max_val = 0
+        if not dados_tupla: dados_tupla = [] 
+        
+        for i, row in enumerate(dados_tupla):
+            nome = row[0]
+            val = row[1] if row[1] else 0
+            mn = row[2] if row[2] else 0
+            mx = row[3] if row[3] else 0
+            qt = row[4] if row[4] else 0
+
+            if val > max_val: max_val = val
+            nome_display = nome[:8] + ".." if nome and len(nome) > 10 else (nome if nome else "N/A")
+            
+            tooltip_txt = f"{nome}\nMédia: {val:.2f}{unit_suffix}\nMin: {mn:.2f} | Max: {mx:.2f}\nQtd: {qt}"
+            
+            grp.append(fch.BarChartGroup(x=i, rods=[fch.BarChartRod(from_y=0, to_y=val, width=40 , color=cores[i % len(cores)], tooltip=tooltip_txt, border_radius=0)]))
+            lbl_x.append(fch.ChartAxisLabel(value=i, label=ft.Container(ft.Text(nome_display, size=10, weight="bold"), padding=ft.Padding.all(10))))
+        
+        teto = max_val * 1.4 if max_val > 0 else 10
+        grafico.groups = grp; grafico.max_y = teto; grafico.bottom_axis.labels = lbl_x
+
+    def popular_grafico_agrupado(res_dados, grafico, modo_multiplo, cores_base, unit_suffix=""):
+        if not modo_multiplo:
+            popular_grafico_simples(res_dados, grafico, cores_base, unit_suffix)
+        else:
+            if not res_dados: res_dados = []
+            medicos_unicos = sorted(list(set(row[1] for row in res_dados)))
+            exames_unicos = sorted(list(set(row[0] for row in res_dados)))
+            
+            dados_map = {ex: {} for ex in exames_unicos}
+            max_val = 0
+            for ex, med, val, mn, mx, qt in res_dados:
+                if val > max_val: max_val = val
+                dados_map[ex][med] = (val, mn, mx, qt)
+            
+            mapa_cores = {med: cores_base[i % len(cores_base)] for i, med in enumerate(medicos_unicos)}
+            grupos = []
+            eixo_x = []
+            
+            for i, exame in enumerate(exames_unicos):
+                barras = []
+                for medico in medicos_unicos:
+                    dados_med = dados_map[exame].get(medico, (0, 0, 0, 0))
+                    valor, mn, mx, qt = dados_med
+                    tooltip_txt = f"{medico}\nMédia: {valor:.2f}{unit_suffix}\nMin: {mn:.2f} | Max: {mx:.2f}\nQtd: {qt}"
+                    barras.append(fch.BarChartRod(from_y=0, to_y=valor, width=15, color=mapa_cores[medico], tooltip=tooltip_txt, border_radius=0))
+                
+                grupos.append(fch.BarChartGroup(x=i, rods=barras))
+                eixo_x.append(fch.ChartAxisLabel(value=i, label=ft.Container(ft.Text(exame, size=10, weight="bold"), padding=ft.Padding.all(10))))
+
+            teto = max_val * 1.4 if max_val > 0 else 10
+            grafico.groups = grupos
+            grafico.bottom_axis.labels = eixo_x
+            grafico.max_y = teto
+            legenda = " | ".join(medicos_unicos)
+            grafico.left_axis.title.value = f"Valores ({legenda})"
+
+    
+
     # --- FUNÇÃO PRINCIPAL DE ATUALIZAÇÃO DA TELA ---
 
-    def atualizar_tudo(e=None):
+    # 1. ATUALIZA SÓ A TABELA (Leve e Rápida)
+    def atualizar_apenas_tabela():
         global data_inicio, data_final, pagina_atual
+        # Pega valores dos inputs
         v_min, v_max = min_dose.value, max_dose.value
         v_min_t, v_max_t = min_tempo_entry.value, max_tempo_entry.value
         v_min_dap, v_max_dap = min_dap_entry.value, max_dap_entry.value
         v_med, v_exm, v_sala = medico_entry.value, exame_entry.value, sala_entry.value
-        v_sexo = sexo_entry.value
-        v_id_pac = id_paciente_entry.value
+        v_sexo, v_id_pac = sexo_entry.value, id_paciente_entry.value
+        
         offset = (pagina_atual - 1) * itens_por_pagina
+        
+        # Busca SQL Limitada 
         dados, total_registros = carregar_dados_banco(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac, itens_por_pagina, offset)
         
         tabela.rows.clear()
+        
+        # Reconstrói as linhas 
         for row in dados:
-            # 1. Lógica para verificar a Dose (row[4])
             try:
-                # Garante que troca virgula por ponto e converte para float
                 valor_dose = float(str(row[4]).replace(',', '.'))
             except (ValueError, TypeError):
                 valor_dose = 0.0
 
-            # 2. Define o conteúdo da célula de Dose
             if valor_dose >= 1000 and valor_dose < 2000:
-                celula_dose = ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color="#8F00FF", size=16,),
-                        ft.Text(str(row[4]), color="#8F00FF", weight=ft.FontWeight.BOLD, selectable=True)
-                    ],
-                    alignment=ft.MainAxisAlignment.START,
-                    spacing=5
-                )
-
+                color_icon, color_text = "#8F00FF", "#8F00FF" # Roxo
             elif valor_dose >= 2000 and valor_dose < 3000:
-                celula_dose = ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.BLUE, size=16,),
-                        ft.Text(str(row[4]), color=ft.Colors.BLUE, weight=ft.FontWeight.BOLD, selectable=True)
-                    ],
-                    alignment=ft.MainAxisAlignment.START,
-                    spacing=5
-                )
-            
+                color_icon, color_text = ft.Colors.BLUE, ft.Colors.BLUE
             elif valor_dose >= 3000 and valor_dose < 4000:
-                celula_dose = ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.YELLOW, size=16,),
-                        ft.Text(str(row[4]), color=ft.Colors.YELLOW, weight=ft.FontWeight.BOLD, selectable=True)
-                    ],
-                    alignment=ft.MainAxisAlignment.START,
-                    spacing=5
-                )
-
+                color_icon, color_text = ft.Colors.YELLOW, ft.Colors.YELLOW
             elif valor_dose >= 4000 and valor_dose < 5000:
-                celula_dose = ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.ORANGE, size=16,),
-                        ft.Text(str(row[4]), color=ft.Colors.ORANGE, weight=ft.FontWeight.BOLD, selectable=True)
-                    ],
-                    alignment=ft.MainAxisAlignment.START,
-                    spacing=5
-                )
-
+                color_icon, color_text = ft.Colors.ORANGE, ft.Colors.ORANGE
             elif valor_dose >= 5000:
-                celula_dose = ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.RED, size=16,),
-                        ft.Text(str(row[4]), color=ft.Colors.RED, weight=ft.FontWeight.BOLD, selectable=True)
-                    ],
-                    alignment=ft.MainAxisAlignment.START,
-                    spacing=5
-                )
-            
+                color_icon, color_text = ft.Colors.RED, ft.Colors.RED
+            else:
+                color_icon, color_text = None, None
+
+            if color_icon:
+                celula_dose = ft.Row([ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=color_icon, size=16), ft.Text(str(row[4]), color=color_text, weight="bold", selectable=True)], spacing=5)
             else:
                 celula_dose = ft.Text(str(row[4]) if row[4] else "", selectable=True)
 
-            # 3. Adiciona a linha na tabela
             tabela.rows.append(ft.DataRow(cells=[
-                ft.DataCell(ft.Text(str(row[0]), weight="bold", selectable=True)),                       # ID célula
-                ft.DataCell(ft.Text(formatar_data(row[1]), selectable=True)),                            # Data
-                ft.DataCell(ft.Text(str(row[2])[:20] if row[2] else "", selectable=True)),               # Médico   
-                ft.DataCell(ft.Text(str(row[3]) if row[3] else "", selectable=True)),                    # Exame
-                ft.DataCell(ft.Text(str(formatar_tempo(row[5])) if row[5] else "", selectable=True)),    # Tempo
-                ft.DataCell(ft.Text(str(row[7]) if row[7] else "", selectable=True)),                    # ID Paciente
-                ft.DataCell(ft.Text(str(row[8]) if row[8] else "", selectable=True)),                    # Sexo
-                ft.DataCell(ft.Text(str(row[9]) if row[9] else "", selectable=True)),                    # Sala
-                ft.DataCell(ft.Text(str(float(row[6])) if row[6] else "", selectable=True)),             # Dap
-                ft.DataCell(celula_dose),                                                                # Dose
+                ft.DataCell(ft.Text(str(row[0]), weight="bold", selectable=True)),
+                ft.DataCell(ft.Text(formatar_data(row[1]), selectable=True)),
+                ft.DataCell(ft.Text(str(row[2])[:20] if row[2] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(row[3]) if row[3] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(formatar_tempo(row[5])) if row[5] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(row[7]) if row[7] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(row[8]) if row[8] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(row[9]) if row[9] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(float(row[6])) if row[6] else "", selectable=True)),
+                ft.DataCell(celula_dose),
             ]))
         
         total_paginas = math.ceil(total_registros / itens_por_pagina) if total_registros > 0 else 1
         txt_paginacao.value = f"Página {pagina_atual} de {total_paginas} (Total: {total_registros})"
-        btn_anterior.disabled = (pagina_atual == 1); btn_proximo.disabled = (pagina_atual >= total_paginas)
+        btn_anterior.disabled = (pagina_atual == 1)
+        btn_proximo.disabled = (pagina_atual >= total_paginas)
+        tabela.update()
+        controles_paginacao.update()
 
-        # Helper para Gráfico Simples
-        def popular_grafico_simples(dados_tupla, grafico, cores, unit_suffix=""):
-            grp = []; lbl_x = []; max_val = 0
-            for i, row in enumerate(dados_tupla):
-                nome = row[0]
-                val = row[1] if row[1] else 0
-                mn = row[2] if row[2] else 0
-                mx = row[3] if row[3] else 0
-                qt = row[4] if row[4] else 0
 
-                if val > max_val: max_val = val
-                nome_display = nome[:8] + ".." if nome and len(nome) > 10 else (nome if nome else "N/A")
-                
-                tooltip_txt = f"{nome}\nMédia: {val:.2f}{unit_suffix}\nMin: {mn:.2f} | Max: {mx:.2f}\nQtd: {qt}"
-                
-                grp.append(fch.BarChartGroup(x=i, rods=[fch.BarChartRod(from_y=0, to_y=val, width=40, color=cores[i % len(cores)], tooltip=fch.BarChartRodTooltip(tooltip_txt), border_radius=0)]))
-                lbl_x.append(fch.ChartAxisLabel(value=i, label=ft.Container(ft.Text(nome_display, size=10, weight="bold"), padding=ft.Padding.all(10))))
+    # 2. ATUALIZA SÓ O GRÁFICO SELECIONADO (Otimizado)
+    def atualizar_apenas_graficos(e=None):
+        # Descobre o que o usuário quer ver
+        tipo = selecao_grafico.value
+        
+        # Pega os filtros
+        v_min, v_max = min_dose.value, max_dose.value
+        v_min_t, v_max_t = min_tempo_entry.value, max_tempo_entry.value
+        v_min_dap, v_max_dap = min_dap_entry.value, max_dap_entry.value
+        v_med, v_exm, v_sala = medico_entry.value, exame_entry.value, sala_entry.value
+        v_sexo, v_id_pac = sexo_entry.value, id_paciente_entry.value
+
+        # Variáveis para montar a tela
+        grafico_obj = None
+        titulo_grafico = ""
+        funcao_salvar = None
+
+        # --- LÓGICA DE SELEÇÃO ---
+        
+        if tipo == "Evolução Temporal (Linha)":
+            titulo_grafico = "Evolução Temporal (Exames/Dia)"
+            funcao_salvar = handle_get_directory_path_evolucao
             
-            # AUMENTADO O TETO PARA 1.6 (60% de margem)
-            teto = max_val * 1.6 if max_val > 0 else 10
-            grafico.groups = grp; grafico.max_y = teto; grafico.bottom_axis.labels = lbl_x#; grafico.left_axis.labels = lbl_y
+            # Cálculo
+            dados_evo = calcular_evolucao_temporal(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
+            
+            if dados_evo:
+                pontos = []
+                for i, r in enumerate(dados_evo):
+                    data_fmt = r[0]
+                    pontos.append(fch.LineChartDataPoint(x=i, y=r[1], tooltip=f"Data: {data_fmt}\nQtd: {r[1]}"))
+                
+                step = max(1, int(len(dados_evo) / 6))
+                lbl_x = [fch.ChartAxisLabel(value=i, label=ft.Container(ft.Text(r[0][5:].replace("-","/"), size=10, weight="bold"), padding=ft.Padding.only(top=10))) for i, r in enumerate(dados_evo) if i % step == 0]
 
-        # Helper para Gráfico Agrupado (Múltiplos Médicos) ou Simples
-        def popular_grafico_agrupado(res_dados, grafico, modo_multiplo, cores_base, unit_suffix=""):
-            if not modo_multiplo:
-                popular_grafico_simples(res_dados, grafico, cores_base, unit_suffix)
+                grafico_linha.data_series = [fch.LineChartData(points=pontos, stroke_width=3, color=ft.Colors.CYAN, curved=True, below_line_bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.CYAN))]
+                grafico_linha.bottom_axis.labels = lbl_x
+                grafico_linha.max_x = len(dados_evo) - 1
+                grafico_linha.max_y = (max([r[1] for r in dados_evo]) * 1.2) if dados_evo else 10
             else:
-                medicos_unicos = sorted(list(set(row[1] for row in res_dados)))
-                exames_unicos = sorted(list(set(row[0] for row in res_dados)))
-                
-                dados_map = {ex: {} for ex in exames_unicos}
-                max_val = 0
-                for ex, med, val, mn, mx, qt in res_dados:
-                    if val > max_val: max_val = val
-                    dados_map[ex][med] = (val, mn, mx, qt)
-                
-                mapa_cores = {med: cores_base[i % len(cores_base)] for i, med in enumerate(medicos_unicos)}
-                grupos = []
-                eixo_x = []
-                
-                for i, exame in enumerate(exames_unicos):
-                    barras = []
-                    for medico in medicos_unicos:
-                        dados_med = dados_map[exame].get(medico, (0, 0, 0, 0))
-                        valor, mn, mx, qt = dados_med
-                        tooltip_txt = f"{medico}\nMédia: {valor:.2f}{unit_suffix}\nMin: {mn:.2f} | Max: {mx:.2f}\nQtd: {qt}"
-                        barras.append(fch.BarChartRod(from_y=0, to_y=valor, width=15, color=mapa_cores[medico], tooltip=fch.BarChartRodTooltip(tooltip_txt), border_radius=0))
-                    
-                    grupos.append(fch.BarChartGroup(x=i, rods=barras))
-                    eixo_x.append(fch.ChartAxisLabel(value=i, label=ft.Container(ft.Text(exame, size=10, weight="bold"), padding=ft.Padding.all(10))))
+                grafico_linha.data_series = []
+            
+            grafico_obj = grafico_linha
 
-                # AUMENTADO O TETO PARA 1.4
-                teto = max_val * 1.4 if max_val > 0 else 10
-                eixo_y = [fch.ChartAxisLabel(value=j * (teto/5), label=ft.Text(f"{j * (teto/5):.1f}", size=12, weight="bold")) for j in range(6)]
-                
-                grafico.groups = grupos
-                grafico.bottom_axis.labels = eixo_x
-                #grafico.left_axis.labels = eixo_y
-                grafico.max_y = teto
-                legenda = " | ".join(medicos_unicos)
-                grafico.left_axis.title.value = f"Valores ({legenda})"
+        elif tipo == "Média de Dose por Médico":
+            titulo_grafico = "Média Dose/Médico"
+            funcao_salvar = handle_get_directory_path_dose_medico
+            res = calcular_media_medico(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
+            popular_grafico_simples(res, grafico_barras, [ft.Colors.GREEN, ft.Colors.BLUE, ft.Colors.RED, ft.Colors.ORANGE, ft.Colors.PURPLE])
+            grafico_obj = grafico_barras
 
-        # 1 & 2. Gráficos de Média por Médico (Simples)
-        res_dose_med = calcular_media_medico(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
-        popular_grafico_simples(res_dose_med, grafico_barras, [ft.Colors.GREEN, ft.Colors.BLUE, ft.Colors.RED, ft.Colors.ORANGE, ft.Colors.PURPLE, ft.Colors.TEAL])
+        elif tipo == "Média de Tempo por Médico":
+            titulo_grafico = "Média Tempo/Médico"
+            funcao_salvar = handle_get_directory_path_tempo_medico
+            res = calcular_media_tempo_medico(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
+            popular_grafico_simples(res, grafico_tempo, [ft.Colors.DEEP_ORANGE, ft.Colors.INDIGO, ft.Colors.AMBER], " min")
+            grafico_obj = grafico_tempo
+
+        elif tipo == "Média de Dose por Exame":
+            titulo_grafico = "Média Dose/Exame"
+            funcao_salvar = handle_get_directory_path_dose_exame
+            res, modo_mult = calcular_media_exame(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
+            popular_grafico_agrupado(res, grafico_exame, modo_mult, [ft.Colors.BLUE, ft.Colors.RED, ft.Colors.GREEN])
+            grafico_obj = grafico_exame
+
+        elif tipo == "Média de Tempo por Exame":
+            titulo_grafico = "Média Tempo/Exame"
+            funcao_salvar = handle_get_directory_path_tempo_exame
+            res, modo_mult = calcular_media_tempo_exame(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
+            popular_grafico_agrupado(res, grafico_tempo_exame, modo_mult, [ft.Colors.BROWN, ft.Colors.CYAN, ft.Colors.LIME], " min")
+            grafico_obj = grafico_tempo_exame
+
+        # --- MONTAGEM FINAL DA TELA ---
         
-        res_tempo_med = calcular_media_tempo_medico(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
-        popular_grafico_simples(res_tempo_med, grafico_tempo, [ft.Colors.DEEP_ORANGE, ft.Colors.INDIGO, ft.Colors.AMBER, ft.Colors.CYAN, ft.Colors.PINK, ft.Colors.LIME], " min")
-
-        # 3. Gráfico Dose por Exame (Pode ser Multiplo)
-        res_dose_exame, modo_mult_dose = calcular_media_exame(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
-        popular_grafico_agrupado(res_dose_exame, grafico_exame, modo_mult_dose, [ft.Colors.BLUE, ft.Colors.RED, ft.Colors.GREEN, ft.Colors.ORANGE, ft.Colors.PURPLE])
-
-        # 4. Gráfico Tempo por Exame (Pode ser Multiplo)
-        res_tempo_exame, modo_mult_tempo = calcular_media_tempo_exame(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
-        popular_grafico_agrupado(res_tempo_exame, grafico_tempo_exame, modo_mult_tempo, [ft.Colors.BROWN, ft.Colors.CYAN, ft.Colors.LIME, ft.Colors.PINK, ft.Colors.INDIGO], " min")
-
-        # --- ATUALIZAÇÃO DO GRÁFICO DE LINHA ---
-        dados_evo = calcular_evolucao_temporal(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
-        
-        if dados_evo:
-            pontos = []
-            for i, r in enumerate(dados_evo):
-                data_formatada = r[0]
-                texto_tooltip = f"Data: {data_formatada}\nQtd: {r[1]}"
-                
-                pontos.append(
-                    fch.LineChartDataPoint(
-                        x=i, 
-                        y=r[1],
-                        tooltip=texto_tooltip 
-                    )
-                )
-
-            serie_dados = fch.LineChartData(
-                points=pontos,
-                stroke_width=3,
-                color=ft.Colors.CYAN,
-                curved=True,
-                rounded_stroke_cap=True,
-                below_line_bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.CYAN),
+        # Cria um cabeçalho com o Título e o Botão de Salvar específico
+        cabecalho = ft.Row([
+            ft.Text(titulo_grafico, size=20, weight="bold"),
+            ft.IconButton(
+                icon=ft.Icons.SAVE_ALT, 
+                tooltip="Salvar Gráfico como PNG", 
+                on_click=funcao_salvar
             )
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
-            # 3. Configura Labels do Eixo X (Datas)
-            total_pontos = len(dados_evo)
-            step = max(1, int(total_pontos / 6)) 
-            
-            labels_x = []
-            for i, r in enumerate(dados_evo):
-                if i % step == 0:
-                    data_formatada = r[0][5:].replace("-", "/") 
-                    labels_x.append(
-                        fch.ChartAxisLabel(
-                            value=i, 
-                            label=ft.Container(
-                                ft.Text(data_formatada, size=10, weight="bold"), 
-                                padding=ft.Padding.only(top=10)
-                            )
-                        )
-                    )
+        # Atualiza o conteúdo do container principal
+        container_grafico_ativo.content = ft.Column([
+            cabecalho,
+            ft.Container(height=20), # Espaçamento
+            ft.Container(content=grafico_obj, height=600) # O gráfico em si
+        ])
+        
+        container_grafico_ativo.update()
 
-            # 4. Aplica ao gráfico
-            grafico_linha.data_series = [serie_dados]
-            grafico_linha.bottom_axis.labels = labels_x
-            
-            # Ajusta limites para o gráfico ficar bonito
-            max_y_val = max([r[1] for r in dados_evo]) if dados_evo else 10
-            grafico_linha.max_y = max_y_val * 1.2
-            grafico_linha.max_x = len(dados_evo) - 1
-        
-        else:
-            # Se não tiver dados, limpa
-            grafico_linha.data_series = []
-        
-        page.update()
+    # 3. O MAESTRO (Atualiza o que for necessário)
+    def atualizar_tudo(e=None):
+        atualizar_apenas_tabela()
+        atualizar_apenas_graficos()
 
     # --- DIÁLOGOS DE EDIÇÃO (MODAIS) ---
 
@@ -1530,26 +1512,19 @@ def main(page: ft.Page):
         # 2. Processa cada item (pode ser número único ou intervalo)
         for token in tokens:
             token = token.strip()
-            
-            # Se tiver hífen, é um intervalo (Ex: 1769-1775)
             if '-' in token:
                 try:
                     partes = token.split('-')
                     if len(partes) == 2:
                         inicio = int(partes[0])
                         fim = int(partes[1])
-                        
-                        # Garante que o inicio é menor que o fim para o range funcionar
                         if inicio > fim: 
                             inicio, fim = fim, inicio
-                        
-                        # Adiciona todos os números do intervalo à lista
                         for i in range(inicio, fim + 1):
                             ids_para_processar.append(str(i))
                 except ValueError:
                     page.show_dialog(ft.SnackBar(ft.Text("Intervalo ou ID inválidos"), bgcolor="red"))
-            
-            # Se não tiver hífen, é um número normal (Ex: 10)
+
             elif token.isdigit():
                 ids_para_processar.append(token)
 
@@ -1576,34 +1551,27 @@ def main(page: ft.Page):
         if d:
             f_data.value = str(d[0])
             f_medico.value = str(d[1] or "")
-            
-            # --- CORREÇÃO DO DROPDOWN EXAME ---
             exame_db = str(d[2] or "")
-            # Pega as opções que estão atualmente no dropdown
             opcoes_exame_atuais = [opt.key for opt in f_exame.options] if f_exame.options else []
-            # Se o exame do banco não estiver na lista do dropdown, adiciona temporariamente
             if exame_db and exame_db not in opcoes_exame_atuais:
                 f_exame.options.append(ft.dropdown.Option(exame_db))
-            f_exame.value = exame_db
 
+            f_exame.value = exame_db
             f_dose.value = str(d[3] or "")
             f_tempo.value = str(d[4] or "")
             f_dap.value = str(d[5] or "")
             f_paciente_id.value = str(d[6] or "")
             f_sexo.value = str(d[7] or "")
-            
-            # --- CORREÇÃO DO DROPDOWN SALA/EQUIPAMENTO ---
             sala_db = str(d[8] or "")
-            # Pega as opções que estão atualmente no dropdown de sala
             opcoes_sala_atuais = [opt.key for opt in f_sala.options] if f_sala.options else []
-            # Se a sala do banco não estiver na lista do dropdown, adiciona temporariamente
+
             if sala_db and sala_db not in opcoes_sala_atuais:
                 f_sala.options.append(ft.dropdown.Option(sala_db))
             f_sala.value = sala_db
 
             page.pop_dialog()
             page.show_dialog(dlg_form_edit)
-            page.update() # Garante que a interface atualize
+            page.update() 
         else:
             page.show_dialog(ft.SnackBar(ft.Text("Não encontrado"), bgcolor="red"))
 
@@ -1618,17 +1586,14 @@ def main(page: ft.Page):
 
     # --- LOGICA DE GERENCIAR EXAMES ---
     
-    # Campo para digitar novo exame
     txt_novo_exame = ft.TextField(label="Novo Tipo", expand=True, on_submit=lambda e: add_exame_click(e))
     lista_view_exames = ft.Column(scroll=ft.ScrollMode.AUTO, height=300)
 
     def carregar_lista_no_modal():
-        # Limpa e recarrega a lista visual do modal
         lista_view_exames.controls.clear()
         
         conn = conectar()
         if not conn: 
-            # Se não tiver banco conectado, avisa e para
             lista_view_exames.controls.append(ft.Text("Nenhum banco de dados selecionado."))
             page.update()
             return 
@@ -1662,7 +1627,7 @@ def main(page: ft.Page):
         if adicionar_tipo_exame_db(txt_novo_exame.value):
             txt_novo_exame.value = ""
             carregar_lista_no_modal()
-            atualizar_dropdowns_globais() # Atualiza a tela principal
+            atualizar_dropdowns_globais() 
             page.update()
 
     def remove_exame_click(nome_alvo):
@@ -1691,15 +1656,11 @@ def main(page: ft.Page):
         carregar_lista_no_modal()
         page.show_dialog(dlg_gerenciar_exames)
 
-    # --- LOGICA DE GERENCIAR EQUIPAMENTOS S/N ---
-    
-    # Campo para digitar novo equipamento
     # --- LOGICA DE GERENCIAR EXAMES ---
     
     txt_novo_exame = ft.TextField(label="Novo Tipo", expand=True, on_submit=lambda e: add_exame_click(e))
     lista_view_exames = ft.Column(scroll=ft.ScrollMode.AUTO, height=300)
 
-    # NOME ALTERADO AQUI
     def carregar_lista_exames():
         lista_view_exames.controls.clear()
         
@@ -1735,13 +1696,13 @@ def main(page: ft.Page):
         if not txt_novo_exame.value: return
         if adicionar_tipo_exame_db(txt_novo_exame.value):
             txt_novo_exame.value = ""
-            carregar_lista_exames() # NOME ALTERADO
+            carregar_lista_exames()
             atualizar_dropdowns_globais() 
             page.update()
 
     def remove_exame_click(nome_alvo):
         if remover_tipo_exame_db(nome_alvo):
-            carregar_lista_exames() # NOME ALTERADO
+            carregar_lista_exames() 
             atualizar_dropdowns_globais()
             page.update()
 
@@ -1761,7 +1722,7 @@ def main(page: ft.Page):
     )
 
     def abrir_gerenciador_exames(e):
-        carregar_lista_exames() # NOME ALTERADO
+        carregar_lista_exames() 
         page.show_dialog(dlg_gerenciar_exames)
 
     # --- LOGICA DE GERENCIAR EQUIPAMENTOS S/N ---
@@ -1769,7 +1730,6 @@ def main(page: ft.Page):
     txt_novo_equipamento = ft.TextField(label="Novo Tipo", expand=True, on_submit=lambda e: add_equipamento_click(e))
     lista_view_equipamento = ft.Column(scroll=ft.ScrollMode.AUTO, height=300)
 
-    # NOME ALTERADO AQUI
     def carregar_lista_equipamentos():
         lista_view_equipamento.controls.clear()
         
@@ -1805,13 +1765,13 @@ def main(page: ft.Page):
         if not txt_novo_equipamento.value: return
         if adicionar_tipo_equipamento_db(txt_novo_equipamento.value):
             txt_novo_equipamento.value = ""
-            carregar_lista_equipamentos() # NOME ALTERADO
+            carregar_lista_equipamentos() 
             atualizar_dropdowns_globais() 
             page.update()
 
     def remove_equipamento_click(nome_alvo):
         if remover_tipo_equipamento_db(nome_alvo):
-            carregar_lista_equipamentos() # NOME ALTERADO
+            carregar_lista_equipamentos() 
             atualizar_dropdowns_globais()
             page.update()
 
@@ -1831,15 +1791,13 @@ def main(page: ft.Page):
     )
 
     def abrir_gerenciador_equipamento(e):
-        carregar_lista_equipamentos() # NOME ALTERADO
+        carregar_lista_equipamentos() 
         page.show_dialog(dlg_gerenciar_equipamento)
 
 
     def atualizar_dropdowns_globais():
-        # Recarrega a lista do banco
         lista_atualizada_exm = inicializar_tipos_exames()
         lista_atualizada_eqp = inicializar_equipamento()
-        # Atualiza o Dropdown de Filtro e o de Adicionar/Editar
         novas_opcoes_exm = [ft.dropdown.Option(x) for x in lista_atualizada_exm]
         novas_opcoes_eqp = [ft.dropdown.Option(x) for x in lista_atualizada_eqp]
         exame_entry.options = novas_opcoes_exm
@@ -1858,7 +1816,11 @@ def main(page: ft.Page):
         sexo_entry.value = None
         id_paciente_entry.value = ""
         atualizar_tudo()
-    def mudar_pagina(d): global pagina_atual; pagina_atual += d; pagina_atual = max(1, pagina_atual); atualizar_tudo()
+    def mudar_pagina(d):
+        global pagina_atual
+        pagina_atual += d
+        pagina_atual = max(1, pagina_atual) 
+        atualizar_apenas_tabela()
 
 
     # --- APOIO / PIX ---
@@ -1874,7 +1836,6 @@ def main(page: ft.Page):
         page.show_dialog(ft.SnackBar(ft.Text("Chave Pix copiada!"), bgcolor="green"))
         page.update()
 
-    # Cria o Modal (Janela flutuante)
     dlg_pix = ft.AlertDialog(
         title=ft.Text("Apoie o Projeto"),
         content=ft.Column([
@@ -1882,7 +1843,7 @@ def main(page: ft.Page):
             ft.Text("Escaneie o QR Code ou copie a chave abaixo:", text_align="center"),
             ft.Container(
                 content=ft.Image(
-                    src="pix.jpg",  # Nome do arquivo na pasta assets
+                    src="pix.jpg",
                     width=500, 
                     height=500,
                     fit="contain"
@@ -1913,19 +1874,17 @@ def main(page: ft.Page):
         "Apoiar", 
         icon=ft.Icons.VOLUNTEER_ACTIVISM, 
         style=ft.ButtonStyle(bgcolor=ft.Colors.PINK_400, color=ft.Colors.WHITE),
-        on_click=abrir_modal_pix # <--- Ação alterada aqui
+        on_click=abrir_modal_pix 
     )
     
     # --- INTERFACE DE CONTROLE ---
-    # Função para alternar visibilidade
 
+    # Função para alternar visibilidade
     def toggle_filtros(e):
         # Inverte o estado atual (Se True vira False, se False vira True)
         estado_atual = linha_1.visible
         linha_1.visible = not estado_atual
         linha_2.visible = not estado_atual
-        
-        # Opcional: Muda o ícone do botão para indicar estado
         if linha_1.visible:
             btn_toggle_filtros.icon = ft.Icons.VISIBILITY_OFF
             btn_toggle_filtros.tooltip = "Ocultar Filtros"
@@ -1958,7 +1917,7 @@ def main(page: ft.Page):
         icon_size=20,
         on_click=abrir_gerenciador_equipamento)
     btn_toggle_filtros = ft.IconButton(
-        icon=ft.Icons.VISIBILITY_OFF, # Começa visivel, então icone de "esconder"
+        icon=ft.Icons.VISIBILITY_OFF, 
         tooltip="Ocultar Filtros",
         on_click=toggle_filtros
     )
@@ -1976,7 +1935,19 @@ def main(page: ft.Page):
         on_click=exportar_csv_filtrado
     )
 
-
+    selecao_grafico = ft.Dropdown(
+        label="Selecione a Análise",
+        width=400,
+        options=[
+            ft.dropdown.Option("Evolução Temporal (Linha)"),
+            ft.dropdown.Option("Média de Dose por Médico"),
+            ft.dropdown.Option("Média de Tempo por Médico"),
+            ft.dropdown.Option("Média de Dose por Exame"),
+            ft.dropdown.Option("Média de Tempo por Exame"),
+        ],
+        value="Evolução Temporal (Linha)", 
+        on_select=atualizar_apenas_graficos
+    )
     # --- LAYOUT CRUD ---
     btn_add = ft.FilledButton("Adicionar", icon=ft.Icons.ADD, style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE), on_click=open_add_dialog)
     btn_edit = ft.FilledButton("Editar", icon=ft.Icons.EDIT, style=ft.ButtonStyle(bgcolor=ft.Colors.ORANGE, color=ft.Colors.WHITE), on_click=open_edit_ask_id)
@@ -1987,7 +1958,7 @@ def main(page: ft.Page):
     # Layout das Linhas de Filtro
     linha_1 = ft.Row(controls=[min_dose, max_dose, ft.VerticalDivider(), min_dap_entry, max_dap_entry, ft.VerticalDivider(), min_tempo_entry, max_tempo_entry, ft.VerticalDivider()], scroll=ft.ScrollMode.ADAPTIVE)
     linha_2 = ft.Row(controls=[medico_entry, ft.Row([exame_entry, btn_config_exames], spacing=0), ft.VerticalDivider(), ft.Row([sala_entry, btn_config_equipamento], spacing=0), ft.VerticalDivider(), sexo_entry, id_paciente_entry, btn_calendar, txt_datas,], scroll=ft.ScrollMode.ADAPTIVE)    
-    linha_3 = ft.Row(controls=[btn_file, btn_filtrar, btn_limpar, btn_upload, btn_apoio, btn_tema, btn_toggle_filtros], scroll=ft.ScrollMode.ADAPTIVE)
+    linha_3 = ft.Row(controls=[btn_file, btn_filtrar, btn_limpar, btn_upload, btn_apoio, selecao_grafico, btn_tema, btn_toggle_filtros], scroll=ft.ScrollMode.ADAPTIVE)
 
     # Layout Conteúdo Tabela
     conteudo_tabela = ft.Column(
@@ -1997,64 +1968,31 @@ def main(page: ft.Page):
     
     # Layout Conteúdo Dashboard
 
+    container_grafico_ativo = ft.Container(
+        padding=20,
+        expand=True,
+        border_radius=10,
+        border=ft.Border.all(1, ft.Colors.GREY_300)
+    )
+
     conteudo_dashboard = ft.Column(
-        controls=[
-            ft.Row([
-                ft.Text("Média Dose/Médico", size=20, weight="bold"),
-                ft.IconButton(
-                    icon=ft.Icons.SAVE_ALT, 
-                    tooltip="Salvar Gráfico como PNG", 
-                    on_click=handle_get_directory_path_dose_medico)
-            ], alignment="spaceBetween"), container_grafico, 
-
-            ft.Divider(), 
-
-            ft.Row([
-                ft.Text("Média Tempo/Médico", size=20, weight="bold"),
-                ft.IconButton(
-                    icon=ft.Icons.SAVE_ALT, 
-                    tooltip="Salvar Gráfico como PNG", 
-                    on_click=handle_get_directory_path_tempo_medico)
-            ], alignment="spaceBetween"), container_grafico_tempo, 
-
-            ft.Divider(), 
-
-            ft.Row([
-                ft.Text("Média Dose/Exame", size=20, weight="bold"),
-                ft.IconButton(
-                    icon=ft.Icons.SAVE_ALT, 
-                    tooltip="Salvar Gráfico como PNG", 
-                    on_click=handle_get_directory_path_dose_exame)
-            ], alignment="spaceBetween"), container_grafico_exame,
-
-            ft.Divider(), 
-
-            ft.Row([
-                ft.Text("Média Tempo/Exame", size=20, weight="bold"),
-                ft.IconButton(
-                    icon=ft.Icons.SAVE_ALT, 
-                    tooltip="Salvar Gráfico como PNG", 
-                    on_click=handle_get_directory_path_tempo_exame)
-            ], alignment="spaceBetween"), container_grafico_tempo_exame,
-
-            ft.Divider(), 
-     
-            ft.Row([
-                ft.Text("Evolução Temporal (Exames/Dia)", size=20, weight="bold"),
-                ft.IconButton(
-                    icon=ft.Icons.SAVE_ALT, 
-                    tooltip="Salvar Gráfico como PNG", 
-                    on_click=handle_get_directory_path_evolucao)
-            ], alignment="spaceBetween"), container_linha,
-        ], 
-        scroll=ft.ScrollMode.AUTO, expand=True, visible=False
+        controls=[container_grafico_ativo],
+        expand=True, 
+        visible=False,
+        scroll=ft.ScrollMode.ADAPTIVE
     )
 
     # Navegação
     def trocar_aba(e):
-        if e.control.selected_index == 0: conteudo_tabela.visible = True; conteudo_dashboard.visible = False
-        else: conteudo_tabela.visible = False; conteudo_dashboard.visible = True
-        page.update()
+        index = e.control.selected_index
+        if index == 0: # Aba Tabela
+            conteudo_tabela.visible = True
+            conteudo_dashboard.visible = False
+            conteudo_tabela.update()
+        else: # Aba Dashboard
+            conteudo_tabela.visible = False
+            conteudo_dashboard.visible = True
+            conteudo_dashboard.update()
 
     nav_bar = ft.NavigationBar(selected_index=0, on_change=trocar_aba, destinations=[ft.NavigationBarDestination(icon=ft.Icons.LIST_ALT, label="Dados"), ft.NavigationBarDestination(icon=ft.Icons.BAR_CHART, label="Dashboard")])
     page.add( ft.Divider(), linha_1, linha_2, linha_3, ft.Divider(), ft.Column(controls=[conteudo_tabela, conteudo_dashboard], expand=True), nav_bar),
