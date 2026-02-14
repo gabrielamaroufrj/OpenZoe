@@ -13,7 +13,8 @@ dependencies = [
     "matplotlib",
     "pydicom",
     "charset-normalizer",
-    "numpy==1.26.4"
+    "numpy==1.26.4",
+    "fpdf2"
 ]
 
 [dependency-groups]
