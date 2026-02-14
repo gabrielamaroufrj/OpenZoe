@@ -1,5 +1,5 @@
 """
-OpenZoe
+OpenZoe v1.0.2
 ------------------
 Sistema de gerenciamento e análise de doses radiológicas baseado em arquivos DICOM SR.
 Desenvolvido com Python, Flet, SQLite, Pydicom e Matplotlib.
@@ -21,6 +21,8 @@ from pydicom import config
 import os
 import csv
 import io
+from fpdf import FPDF
+import tempfile
 
 
 # --- VARIÁVEIS GLOBAIS ---
@@ -70,6 +72,37 @@ def formatar_data(valor):
 def formatar_tempo(valor):
     """Remove milissegundos da string de tempo."""
     return str(valor).split()[0].replace('.000000', '') if valor else ""
+
+# --- CLASSE DO RELATÓRIO PDF ---
+
+# --- CLASSE DO RELATÓRIO PDF ---
+class RelatorioPDF(FPDF):
+    def header(self):
+        # 1. Pega o caminho absoluto (à prova de falhas)
+        diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+        caminho_logo = os.path.join(diretorio_atual, "assets", "icon.png")
+        
+        # 2. Adiciona a Logo (se existir)
+        if os.path.exists(caminho_logo):
+            self.image(caminho_logo, x=10, y=8, w=12) 
+        else:
+            # Apenas para você saber se o caminho ainda está errado durante os testes
+            print(f"ATENÇÃO: Logo não encontrada no caminho: {caminho_logo}")
+
+        # 3. Título principal
+        self.set_font("helvetica", "B", 16)
+        self.set_text_color(0, 51, 102) 
+        self.cell(0, 10, "OpenZoe - Relatório de Dosimetria e Qualidade", align="C", new_x="LMARGIN", new_y="NEXT")
+        
+        # 4. Linha horizontal separadora
+        self.line(10, 24, 200, 24) 
+        self.ln(10)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("helvetica", "I", 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f"Página {self.page_no()}", align="C")
 
 # ==============================================================================
 #                           CAMADA DE BANCO DE DADOS
@@ -274,21 +307,71 @@ def gerar_csv_string(apenas_filtrados=False, inputs_filtros=None):
 # --- FUNÇÕES DE CÁLCULO ---
 
 def calcular_evolucao_temporal(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac):
+    modo_multiplo = False
+    if n_medico and ";" in str(n_medico):
+        modo_multiplo = True
+
     try:
         conn = conectar()
-        if conn is None: return []
+        if conn is None: return [], modo_multiplo
         cursor = conn.cursor()
         sql_where, params = montar_query_filtros(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac)
         
-        # Agrupa por dia (YYYY-MM-DD) e conta quantos exames
-        sql = f"SELECT date(data), COUNT(*) {sql_where} GROUP BY date(data) ORDER BY date(data)"
+        if modo_multiplo:
+            sql = f"SELECT date(data), medico, COUNT(*) {sql_where} GROUP BY date(data), medico ORDER BY date(data)"
+        else:
+            sql = f"SELECT date(data), COUNT(*) {sql_where} GROUP BY date(data) ORDER BY date(data)"
+            
         cursor.execute(sql, params)
         res = cursor.fetchall()
         conn.close()
-        return res
+
+        # --- A MÁGICA DOS DIAS ZERADOS COMEÇA AQUI ---
+        if not res: 
+            return [], modo_multiplo
+
+        # 1. Descobre o primeiro e o último dia do resultado
+        datas = [r[0] for r in res]
+        str_inicio = min(datas)
+        str_fim = max(datas)
+
+        d_inicio = datetime.datetime.strptime(str_inicio, "%Y-%m-%d").date()
+        d_fim = datetime.datetime.strptime(str_fim, "%Y-%m-%d").date()
+
+        # 2. Cria uma lista contínua com TODOS os dias entre o início e o fim
+        todas_datas = []
+        delta = d_fim - d_inicio
+        for i in range(delta.days + 1):
+            dia = d_inicio + datetime.timedelta(days=i)
+            todas_datas.append(dia.strftime("%Y-%m-%d"))
+
+        res_preenchido = []
+        
+        if not modo_multiplo:
+            # Transforma o resultado do banco num dicionário de fácil acesso { '2026-02-10': 5 }
+            mapa_dados = {r[0]: r[1] for r in res}
+            
+            for d in todas_datas:
+                # Se o dia existir no dicionário, pega o valor, senão é 0
+                res_preenchido.append((d, mapa_dados.get(d, 0)))
+        else:
+            # Dicionário para cada médico { 'Dr. A': {'2026-02-10': 5} }
+            medicos = list(set([r[1] for r in res]))
+            mapa_dados = {m: {} for m in medicos}
+            
+            for r in res:
+                mapa_dados[r[1]][r[0]] = r[2] # r[1]=medico, r[0]=data, r[2]=qtd
+                
+            for d in todas_datas:
+                for m in medicos:
+                    # Distribui as datas e garante os zeros onde os médicos não trabalharam
+                    res_preenchido.append((d, m, mapa_dados[m].get(d, 0)))
+
+        return res_preenchido, modo_multiplo
+        
     except Exception as e:
         print(f"Erro Evolução: {e}")
-        return []
+        return [], False
 
 def calcular_media_medico(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac):
     resultados = []
@@ -735,44 +818,170 @@ def main(page: ft.Page):
             except Exception as ex:
                 page.show_dialog(ft.SnackBar(ft.Text(f"Erro: {ex}"), bgcolor="red"))
 
+    # --- Hendler Para montar Relatório (PDF) ---
+
+    async def exportar_pdf_filtrado(e: ft.Event[ft.Button]):
+        v_min, v_max = min_dose.value, max_dose.value
+        v_min_t, v_max_t = min_tempo_entry.value, max_tempo_entry.value
+        v_min_dap, v_max_dap = min_dap_entry.value, max_dap_entry.value
+        v_med, v_exm, v_sala = medico_entry.value, exame_entry.value, sala_entry.value
+        v_sexo, v_id_pac = sexo_entry.value, id_paciente_entry.value
+
+        nome_sugerido = f"Relatorio_Dosimetria_{datetime.datetime.now().strftime('%Y%m%d')}.pdf"
+        filepath = await ft.FilePicker().save_file(file_name=nome_sugerido, allowed_extensions=["pdf"])
+        if not filepath: return
+
+        try:
+            conn = conectar()
+            cursor = conn.cursor()
+            sql_where, params = montar_query_filtros(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
+
+            # Busca os Top 10 e Total de Exames
+            cursor.execute(f"SELECT data, medico, exam, dose_mgy, tempo {sql_where} ORDER BY CAST(REPLACE(dose_mgy, ',', '.') AS REAL) DESC LIMIT 10", params)
+            top10_dados = cursor.fetchall()
+            
+            cursor.execute(f"SELECT COUNT(*) {sql_where}", params)
+            total_exames = cursor.fetchone()[0]
+            conn.close()
+
+            # --- INICIALIZA O PDF E CABEÇALHOS ---
+            pdf = RelatorioPDF()
+            pdf.add_page()
+            
+            pdf.set_font("helvetica", "B", 12)
+            pdf.cell(0, 8, "Filtros Aplicados:", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("helvetica", "", 10)
+            pdf.cell(0, 6, f"Período: {data_inicio if data_inicio else 'Início'} a {data_final if data_final else 'Hoje'}", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 6, f"Médico(s): {v_med if v_med else 'Todos'}", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 6, f"Exame: {v_exm if v_exm else 'Todos'}", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(5)
+
+            # --- O AJUDANTE QUE REAPROVEITA SUAS FUNÇÕES ---
+            def colocar_grafico_no_pdf(funcao_grafico):
+                # Cria um arquivo temporário vazio
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+                
+                # Chama SUA função passando o caminho oculto
+                gerou_com_sucesso = funcao_grafico(caminho_oculto=temp_file) 
+                
+                if gerou_com_sucesso:
+                    if pdf.get_y() > 200: pdf.add_page() # Evita cortar o gráfico
+                    pdf.image(temp_file, w=180)
+                    pdf.ln(5)
+                
+                if os.path.exists(temp_file): os.unlink(temp_file) # Limpa o lixo
+
+            # --- REGRAS INTELIGENTES ---
+            unico_dia = bool(data_inicio and data_final and data_inicio == data_final)
+            unico_medico = bool(v_med and ";" not in v_med)
+
+            if unico_dia:
+                pdf.set_font("helvetica", "B", 14)
+                pdf.set_text_color(0, 100, 0)
+                dfmt = data_inicio[8:10] + "/" + data_inicio[5:7] + "/" + data_inicio[0:4]
+                pdf.cell(0, 10, f"Total de Exames no dia {dfmt}: {total_exames}", new_x="LMARGIN", new_y="NEXT", align="C")
+                pdf.set_text_color(0, 0, 0); pdf.ln(5)
+            else:
+                colocar_grafico_no_pdf(salvar_grafico_evolucao)
+
+            if not unico_medico:
+                colocar_grafico_no_pdf(salvar_grafico_dose_medico)
+                colocar_grafico_no_pdf(salvar_grafico_tempo_medico)
+
+            colocar_grafico_no_pdf(salvar_grafico_dose_exame)
+            colocar_grafico_no_pdf(salvar_grafico_tempo_exame)
+
+            # --- TABELA DE TOP 10 ---
+            if pdf.get_y() > 200: pdf.add_page()
+            pdf.set_font("helvetica", "B", 12)
+            pdf.cell(0, 10, "Atenção: Top 10 Maiores Doses no Período", new_x="LMARGIN", new_y="NEXT")
+            
+            pdf.set_font("helvetica", "B", 10); pdf.set_fill_color(200, 200, 200)
+            pdf.cell(30, 8, "Data", border=1, fill=True); pdf.cell(50, 8, "Médico", border=1, fill=True)
+            pdf.cell(60, 8, "Exame", border=1, fill=True); pdf.cell(25, 8, "Dose", border=1, fill=True)
+            pdf.cell(25, 8, "Tempo", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+
+            pdf.set_font("helvetica", "", 9)
+            for row in top10_dados:
+                ds = str(row[3]) if row[3] else "0.0"
+                pdf.cell(30, 8, str(row[0]).split()[0] if row[0] else "N/A", border=1)
+                pdf.cell(50, 8, str(row[1])[:20] if row[1] else "N/A", border=1)
+                pdf.cell(60, 8, str(row[2])[:25] if row[2] else "N/A", border=1)
+                
+                try:
+                    if float(ds.replace(',', '.')) > 3000:
+                        pdf.set_text_color(200, 0, 0); pdf.set_font("helvetica", "B", 9)
+                except: pass
+                
+                pdf.cell(25, 8, ds, border=1)
+                pdf.set_text_color(0, 0, 0); pdf.set_font("helvetica", "", 9)
+                pdf.cell(25, 8, str(row[4])[:8] if row[4] else "N/A", border=1, new_x="LMARGIN", new_y="NEXT")
+
+            pdf.output(filepath)
+            page.show_dialog(ft.SnackBar(ft.Text("Relatório PDF gerado com sucesso!"), bgcolor="green"))
+
+        except Exception as err:
+            page.show_dialog(ft.SnackBar(ft.Text(f"Erro ao gerar PDF: {err}"), bgcolor="red"))
+
     # --- FUNÇÕES PARA SALVAR GRÁFICOS (MATPLOTLIB) ---
-    def salvar_grafico_evolucao():
+    def salvar_grafico_evolucao(caminho_oculto=None):
         global directory_path
         try:
-            # 1. Busca os mesmos dados que o gráfico usa
-            dados = calcular_evolucao_temporal(data_inicio, data_final, min_dose.value, max_dose.value, 
-                                             medico_entry.value, exame_entry.value, min_tempo_entry.value, 
-                                             max_tempo_entry.value, min_dap_entry.value, max_dap_entry.value, sala_entry.value, sexo_entry.value, id_paciente_entry.value)
+            # 1. Busca os dados e o modo
+            resultado = calcular_evolucao_temporal(data_inicio, data_final, min_dose.value, max_dose.value, 
+                                                   medico_entry.value, exame_entry.value, min_tempo_entry.value, 
+                                                   max_tempo_entry.value, min_dap_entry.value, max_dap_entry.value, sala_entry.value, sexo_entry.value, id_paciente_entry.value)
             
+            dados = resultado[0]
+            modo_multiplo = resultado[1]
+
             if not dados:
-                page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))        
-                page.update()
-                return
+                if not caminho_oculto: # 2. Só mostra o erro vermelho se NÃO for o PDF chamando
+                    page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))        
+                    page.update()
+                return False
 
-            # 2. Separa X e Y
-            #eixo_x = [d[0][5:].replace("-", "/") for d in dados] 
-            eixo_x = [d[0] for d in dados] 
-            eixo_y = [d[1] for d in dados]
+            plt.figure(figsize=(12, 6)) # Aumentei um pouco a largura
 
-            # 3. Cria a figura com Matplotlib (Back-end)
-            plt.figure(figsize=(20, 6)) # Tamanho da imagem
-            plt.plot(eixo_x, eixo_y, marker='o', linestyle='-', color='b')
-            
+            if not modo_multiplo:
+                # --- MODO SIMPLES ---
+                eixo_x = [d[0] for d in dados] 
+                eixo_y = [d[1] for d in dados]
+                plt.plot(eixo_x, eixo_y, marker='o', linestyle='-', color='b')
+            else:
+                # --- MODO MÚLTIPLO ---
+                datas_unicas = sorted(list(set(d[0] for d in dados)))
+                medicos_unicos = sorted(list(set(d[1] for d in dados)))
+
+                mapa_dados = {med: {d: 0 for d in datas_unicas} for med in medicos_unicos}
+                for r in dados:
+                    mapa_dados[r[1]][r[0]] = r[2]
+
+                cores = plt.cm.tab10.colors 
+                for i, medico in enumerate(medicos_unicos):
+                    y_vals = [mapa_dados[medico][d] for d in datas_unicas]
+                    plt.plot(datas_unicas, y_vals, marker='o', linestyle='-', label=medico, color=cores[i % len(cores)])
+
+                plt.legend(title="Médicos") # Mostra a legenda de cores
+
             plt.title("Evolução Temporal de Exames")
             plt.xlabel("Data")
             plt.ylabel("Quantidade")
             plt.grid(True, linestyle='--', alpha=0.7)
-            plt.xticks(rotation=45, fontsize=8) # Gira as datas para caber
-            plt.tight_layout() # Ajusta margens
+            plt.xticks(rotation=45, fontsize=8) 
+            plt.tight_layout() 
 
-            # 4. Salva o arquivo
-            agora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") # Formata a data para evitar caracteres inválidos
+            if caminho_oculto:
+                plt.savefig(caminho_oculto, dpi=150) # Salva qualidade média pro PDF
+                plt.close()
+                return True
+
+            agora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") 
             nome_arquivo = fr"{directory_path}/evolucao_{agora}.png"
             plt.savefig(nome_arquivo, dpi=300) 
             plt.close()
 
-            # 5. Feedback
-            page.show_dialog(ft.SnackBar(ft.Text(f"Salvo como: {nome_arquivo}"), bgcolor="green"))
+            page.show_dialog(ft.SnackBar(ft.Text(f"Salvo como: {os.path.basename(nome_arquivo)}"), bgcolor="green"))
             page.update()
 
         except Exception as err:
@@ -780,7 +989,7 @@ def main(page: ft.Page):
             page.show_dialog(ft.SnackBar(ft.Text(f"Erro ao salvar: {err}"), bgcolor="red"))
             page.update()
 
-    def salvar_grafico_dose_medico():
+    def salvar_grafico_dose_medico(caminho_oculto=None):
         global directory_path
         try:
             # 1. Busca os mesmos dados que o gráfico usa
@@ -789,9 +998,10 @@ def main(page: ft.Page):
                                              max_tempo_entry.value, min_dap_entry.value, max_dap_entry.value, sala_entry.value, sexo_entry.value, id_paciente_entry.value)
             
             if not dados:
-                page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))
-                page.update()
-                return
+                if not caminho_oculto: # 2. Só mostra o erro vermelho se NÃO for o PDF chamando
+                    page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))        
+                    page.update()
+                return False
 
             # 2. Separa X e Y
             # Datas vêm como "YYYY-MM-DD", vamos formatar para "DD/MM"
@@ -816,6 +1026,11 @@ def main(page: ft.Page):
             plt.xticks(rotation=45) # Gira as datas para caber
             plt.tight_layout() # Ajusta margens
 
+            if caminho_oculto:
+                plt.savefig(caminho_oculto, dpi=150) # Salva qualidade média pro PDF
+                plt.close()
+                return True
+
             # 4. Salva o arquivo
             agora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             nome_arquivo = f"{directory_path}/Dose_medico_{agora}.png"
@@ -831,7 +1046,7 @@ def main(page: ft.Page):
             page.show_dialog(ft.SnackBar(ft.Text(f"Erro ao salvar: {err}"), bgcolor="red"))
             page.update()
 
-    def salvar_grafico_tempo_medico():
+    def salvar_grafico_tempo_medico(caminho_oculto=None):
         global directory_path
         try:
             # 1. Busca os mesmos dados que o gráfico usa
@@ -840,9 +1055,10 @@ def main(page: ft.Page):
                                              max_tempo_entry.value, min_dap_entry.value, max_dap_entry.value, sala_entry.value, sexo_entry.value, id_paciente_entry.value)
             
             if not dados:
-                page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))
-                page.update()
-                return
+                if not caminho_oculto: # 2. Só mostra o erro vermelho se NÃO for o PDF chamando
+                    page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))        
+                    page.update()
+                return False
 
             # 2. Separa X e Y
             # Datas vêm como "YYYY-MM-DD", vamos formatar para "DD/MM"
@@ -861,6 +1077,11 @@ def main(page: ft.Page):
             plt.xticks(rotation=45) # Gira as datas para caber
             plt.tight_layout() # Ajusta margens
 
+            if caminho_oculto:
+                plt.savefig(caminho_oculto, dpi=150) # Salva qualidade média pro PDF
+                plt.close()
+                return True
+
             # 4. Salva o arquivo
             agora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             nome_arquivo = f"{directory_path}/Tempo_medico_{agora}.png"
@@ -876,7 +1097,7 @@ def main(page: ft.Page):
             page.show_dialog(ft.SnackBar(ft.Text(f"Erro ao salvar: {err}"), bgcolor="red"))
             page.update()
 
-    def salvar_grafico_dose_exame():
+    def salvar_grafico_dose_exame(caminho_oculto=None):
         global directory_path
         try:
             # 1. Busca os dados e o modo
@@ -888,8 +1109,10 @@ def main(page: ft.Page):
             modo_multiplo = resultado[1]
             
             if not dados:
-                page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))
-                page.update(); return
+                if not caminho_oculto: # 2. Só mostra o erro vermelho se NÃO for o PDF chamando
+                    page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))        
+                    page.update()
+                return False
 
             plt.figure(figsize=(12, 6))
 
@@ -948,6 +1171,11 @@ def main(page: ft.Page):
             plt.grid(True, linestyle='--', alpha=0.7, axis='y')
             plt.tight_layout() 
 
+            if caminho_oculto:
+                plt.savefig(caminho_oculto, dpi=150) # Salva qualidade média pro PDF
+                plt.close()
+                return True
+
             # Salvar
             nome_arquivo = f"{directory_path}/Dose_exame_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             plt.savefig(nome_arquivo, dpi=300)
@@ -961,7 +1189,7 @@ def main(page: ft.Page):
             page.show_dialog(ft.SnackBar(ft.Text(f"Erro ao salvar: {err}"), bgcolor="red"))
             page.update()
 
-    def salvar_grafico_tempo_exame():
+    def salvar_grafico_tempo_exame(caminho_oculto=None):
         global directory_path
         try:
             # 1. Busca os dados e o modo
@@ -973,8 +1201,10 @@ def main(page: ft.Page):
             modo_multiplo = resultado[1]
             
             if not dados:
-                page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))
-                page.update(); return
+                if not caminho_oculto: # 2. Só mostra o erro vermelho se NÃO for o PDF chamando
+                    page.show_dialog(ft.SnackBar(ft.Text("Sem dados para salvar!"), bgcolor="red"))        
+                    page.update()
+                return False
 
             plt.figure(figsize=(12, 6))
 
@@ -1014,6 +1244,11 @@ def main(page: ft.Page):
             plt.ylabel("Tempo médio (min)")
             plt.grid(True, linestyle='--', alpha=0.7, axis='y')
             plt.tight_layout() 
+
+            if caminho_oculto:
+                plt.savefig(caminho_oculto, dpi=150) # Salva qualidade média pro PDF
+                plt.close()
+                return True
 
             nome_arquivo = f"{directory_path}/Tempo_exame_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             plt.savefig(nome_arquivo, dpi=300)
@@ -1190,7 +1425,7 @@ def main(page: ft.Page):
     grafico_tempo_exame = criar_grafico_base("Tempo / Exame")
     container_grafico_tempo_exame = ft.Container(content=grafico_tempo_exame, padding=ft.Padding.all(20), height=600, border_radius=ft.BorderRadius.all(10), border=ft.Border.all(1, ft.Colors.GREY_300))
 
-    # --- NOVO GRÁFICO: EVOLUÇÃO TEMPORAL ---
+    # --- GRÁFICO EVOLUÇÃO TEMPORAL ---
     grafico_linha = fch.LineChart(
         expand=True,
         min_y=0,
@@ -1209,15 +1444,7 @@ def main(page: ft.Page):
             label_size=40,
         ),
         data_series=[] 
-    )
-    
-    container_linha = ft.Container(
-        content=grafico_linha, 
-        padding=ft.Padding.all(20), 
-        height=400, 
-        border_radius=ft.BorderRadius.all(10), 
-        border=ft.Border.all(1, ft.Colors.GREY_300)
-    )
+    )   
 
     # --- INPUTS ---
     min_dose = ft.TextField(label="Dose min", keyboard_type="number", width=150)
@@ -1248,7 +1475,7 @@ def main(page: ft.Page):
     drp = ft.DateRangePicker(start_value=datetime.datetime(year=today.year, month=today.month, day=1), end_value=datetime.datetime(year=today.year, month=today.month, day=15), on_change=handle_change)
     page.overlay.append(drp)
 
-    # --- FUNÇÕES AUXILIARES DE GRÁFICOS (MOVA PARA FORA) ---
+    # --- FUNÇÕES AUXILIARES DE GRÁFICOS ---
 
     def popular_grafico_simples(dados_tupla, grafico, cores, unit_suffix=""):
         grp = []; lbl_x = []; max_val = 0
@@ -1398,22 +1625,60 @@ def main(page: ft.Page):
             titulo_grafico = "Evolução Temporal (Exames/Dia)"
             funcao_salvar = handle_get_directory_path_evolucao
             
-            # Cálculo
-            dados_evo = calcular_evolucao_temporal(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
+            # Agora a função retorna os dados E a flag de modo_multiplo
+            dados_evo, modo_mult_evo = calcular_evolucao_temporal(data_inicio, data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
             
             if dados_evo:
-                pontos = []
-                for i, r in enumerate(dados_evo):
-                    data_fmt = r[0]
-                    pontos.append(fch.LineChartDataPoint(x=i, y=r[1], tooltip=f"Data: {data_fmt}\nQtd: {r[1]}"))
-                
-                step = max(1, int(len(dados_evo) / 6))
-                lbl_x = [fch.ChartAxisLabel(value=i, label=ft.Container(ft.Text(r[0][5:].replace("-","/"), size=10, weight="bold"), padding=ft.Padding.only(top=10))) for i, r in enumerate(dados_evo) if i % step == 0]
+                if not modo_mult_evo:
+                    # --- MODO SIMPLES (1 Linha) ---
+                    pontos = []
+                    for i, r in enumerate(dados_evo):
+                        data_fmt = r[0]
+                        pontos.append(fch.LineChartDataPoint(x=i, y=r[1], tooltip=f"Data: {data_fmt}\nQtd: {r[1]}"))
+                    
+                    step = max(1, int(len(dados_evo) / 6))
+                    lbl_x = [fch.ChartAxisLabel(value=i, label=ft.Container(ft.Text(r[0][5:].replace("-","/"), size=10, weight="bold"), padding=ft.Padding.only(top=10))) for i, r in enumerate(dados_evo) if i % step == 0]
 
-                grafico_linha.data_series = [fch.LineChartData(points=pontos, stroke_width=3, color=ft.Colors.CYAN, curved=True, below_line_bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.CYAN))]
-                grafico_linha.bottom_axis.labels = lbl_x
-                grafico_linha.max_x = len(dados_evo) - 1
-                grafico_linha.max_y = (max([r[1] for r in dados_evo]) * 1.2) if dados_evo else 10
+                    grafico_linha.data_series = [fch.LineChartData(points=pontos, stroke_width=3, color=ft.Colors.CYAN, curved=True, below_line_bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.CYAN))]
+                    grafico_linha.bottom_axis.labels = lbl_x
+                    grafico_linha.max_x = len(dados_evo) - 1
+                    grafico_linha.max_y = (max([r[1] for r in dados_evo]) * 1.2) if dados_evo else 10
+                
+                else:
+                    # --- MODO MÚLTIPLO (Várias Linhas / Médicos) ---
+                    datas_unicas = sorted(list(set(r[0] for r in dados_evo)))
+                    medicos_unicos = sorted(list(set(r[1] for r in dados_evo)))
+
+                    # Cria um "mapa" zerado para garantir que todos os médicos tenham ponto em todas as datas
+                    mapa_dados = {med: {d: 0 for d in datas_unicas} for med in medicos_unicos}
+                    for r in dados_evo:
+                        mapa_dados[r[1]][r[0]] = r[2] # r[1]=medico, r[0]=data, r[2]=qtd
+
+                    cores = [ft.Colors.CYAN, ft.Colors.PINK, ft.Colors.LIME, ft.Colors.ORANGE, ft.Colors.PURPLE, ft.Colors.RED]
+                    series = []
+                    max_y_val = 0
+
+                    # Cria uma linha para cada médico
+                    for idx_med, medico in enumerate(medicos_unicos):
+                        pontos = []
+                        cor = cores[idx_med % len(cores)]
+                        for i, data_exm in enumerate(datas_unicas):
+                            qtd = mapa_dados[medico][data_exm]
+                            if qtd > max_y_val: max_y_val = qtd
+                            pontos.append(fch.LineChartDataPoint(x=i, y=qtd, tooltip=f"{medico}\nData: {data_exm}\nQtd: {qtd}"))
+                        
+                        # Adiciona a linha na lista de séries
+                        series.append(fch.LineChartData(points=pontos, stroke_width=3, color=cor, curved=True))
+
+                    # Labels do Eixo X
+                    step = max(1, int(len(datas_unicas) / 6))
+                    lbl_x = [fch.ChartAxisLabel(value=i, label=ft.Container(ft.Text(d[5:].replace("-","/"), size=10, weight="bold"), padding=ft.Padding.only(top=10))) for i, d in enumerate(datas_unicas) if i % step == 0]
+
+                    grafico_linha.data_series = series
+                    grafico_linha.bottom_axis.labels = lbl_x
+                    grafico_linha.max_x = len(datas_unicas) - 1
+                    grafico_linha.max_y = max_y_val * 1.2 if max_y_val > 0 else 10
+
             else:
                 grafico_linha.data_series = []
             
@@ -1935,6 +2200,13 @@ def main(page: ft.Page):
         on_click=exportar_csv_filtrado
     )
 
+    btn_pdf = ft.IconButton(
+        icon=ft.Icons.PICTURE_AS_PDF, 
+        tooltip="Gerar Relatório em PDF (Filtrado)", 
+        icon_color=ft.Colors.RED_700, 
+        on_click=exportar_pdf_filtrado
+    )
+
     selecao_grafico = ft.Dropdown(
         label="Selecione a Análise",
         width=400,
@@ -1962,7 +2234,7 @@ def main(page: ft.Page):
 
     # Layout Conteúdo Tabela
     conteudo_tabela = ft.Column(
-        controls=[ft.Row(controls=[btn_add, btn_edit, btn_rem], alignment=ft.MainAxisAlignment.CENTER), ft.Row(scroll=ft.ScrollMode.ADAPTIVE, controls=[tabela]), ft.Row(controls=[controles_paginacao, btn_csv_filter, btn_csv_full])],
+        controls=[ft.Row(controls=[btn_add, btn_edit, btn_rem], alignment=ft.MainAxisAlignment.CENTER), ft.Row(scroll=ft.ScrollMode.ADAPTIVE, controls=[tabela]), ft.Row(controls=[controles_paginacao, btn_csv_filter, btn_csv_full, btn_pdf ])],
         scroll=ft.ScrollMode.ADAPTIVE, expand=True, visible=True
     )
     
