@@ -58,6 +58,7 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 * **[Matplotlib](https://matplotlib.org/):** Geração e exportação de gráficos estáticos.
 * **[Flet Charts](https://github.com/flet-dev/flet-charts):** Gráficos interativos nativos.
 * **SQLite3:** Banco de dados relacional leve.
+* * **FPDF:** Gerador de PDFs
 
 ---
 
@@ -79,6 +80,7 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
    pip install flet_charts
    pip install matplotlib
    pip install pydicom
+   pip install fpdf2
 
 3. **Clone o repositório:**
    ```bash
