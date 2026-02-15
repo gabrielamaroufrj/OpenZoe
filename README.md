@@ -58,7 +58,7 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 * **[Matplotlib](https://matplotlib.org/):** Geração e exportação de gráficos estáticos.
 * **[Flet Charts](https://github.com/flet-dev/flet-charts):** Gráficos interativos nativos.
 * **SQLite3:** Banco de dados relacional leve.
-* * **FPDF:** Gerador de PDFs
+* **FPDF:** Gerador de PDFs
 
 ---
 
