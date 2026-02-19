@@ -1,7 +1,7 @@
 ![OpenZoe](assets/icon.png)
 # ☢️ OpenZoe
 
-![Dashboard do OpenZoe]([media/docs/evolucao_temporal.png](https://github.com/gabrielamaroufrj/OpenZoe/blob/aea56ca446c7c20a798d3ce674d2186c6f629420/docs/evolucao_temporal.png))
+![Dashboard do OpenZoe](https://github.com/gabrielamaroufrj/OpenZoe/blob/aea56ca446c7c20a798d3ce674d2186c6f629420/docs/evolucao_temporal.png)
 ![Status](https://img.shields.io/badge/Status-Em_Desenvolvimento-yellow)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 [![AppImage](https://img.shields.io/badge/AppImage-Linux-blue?style=for-the-badge&logo=appimage&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/releases)
