@@ -6,7 +6,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 [![AppImage](https://img.shields.io/badge/AppImage-Linux-blue?style=for-the-badge&logo=appimage&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/releases)
 ![License](https://img.shields.io/badge/License-MIT-green)
-[![Apoie com Pix](https://img.shields.io/badge/Apoie%20com-Pix-32BCAD?style=for-the-badge&logo=pix&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/blob/main/PIX.md)
+[![Apoie com Pix](https://img.shields.io/badge/Apoie%20com-Pix-32BCAD?style=for-the-badge&logo=pix&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/blob/main/docs/PIX.md)
 
 > **Sistema de Gerenciamento e Análise de Doses em Radiologia (DICOM SR)**
 
