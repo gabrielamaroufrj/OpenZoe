@@ -13,7 +13,7 @@ Se este software economizou seu tempo, ajudou no seu trabalho ou estudos, consid
 Você pode escanear o QR Code abaixo com o app do seu banco ou copiar o código "Copia e Cola".
 
 <div align="center">
-  <img src="assets/pix.jpg" width="300" alt="QR Code Pix do OpenZoe">
+  <img src="pix.jpg" width="300" alt="QR Code Pix do OpenZoe">
   <p><i>Escaneie o QR Code acima</i></p>
 </div>
 
