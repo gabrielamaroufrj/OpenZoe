@@ -24,12 +24,39 @@ from reports import charts_export
 from core.utils import formatar_data, formatar_tempo
 from ui import charts_ui
 
+os.makedirs("data", exist_ok=True) # Cria a pasta 'data' no ZimaOS se ela não existir
+os.makedirs("data/dicom_inbox", exist_ok=True)
+state.FILE_PATH = "data/openzoe.db" # Fixa o caminho do banco
+state.DICOM_FOLDER = os.path.abspath("data/dicom_inbox")
+
 # ==============================================================================
 #                           INTERFACE GRÁFICA (FLET)
 # ==============================================================================
 
 def main(page: ft.Page):
     page.title = "OpenZoe - Gerenciador de Radiologia"
+    conn = db.conectar()
+    if conn:
+        cursor = conn.cursor()
+        sql_create = """CREATE TABLE IF NOT EXISTS exames (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data TEXT,
+            medico TEXT,
+            exam TEXT,
+            dose_mgy TEXT,
+            tempo TEXT,
+            dap TEXT,
+            paciente_id TEXT,
+            sexo TEXT,
+            sala TEXT
+        )"""
+        cursor.execute(sql_create)
+        conn.commit()
+        conn.close()
+        
+        db.inicializar_tipos_exames() 
+        db.inicializar_equipamento()
+        db.criar_indices()
 
     def toggle_tema(e):
         page.theme_mode = ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
@@ -83,115 +110,102 @@ def main(page: ft.Page):
         if sucesso and not caminho_oculto: page.show_dialog(ft.SnackBar(ft.Text(f"Salvo como: {msg}"), bgcolor="green"))
         return sucesso
 
-    # --- HANDLERS (SELEÇÃO DE ARQUIVOS) ---
 
-    async def handle_pick_files(e: ft.Event[ft.Button]):
-        files = await ft.FilePicker().pick_files(allow_multiple=True)
-        if files:
-            state.FILE_PATH = files[0].path
-            conn = db.conectar()
-            cursor = conn.cursor()
-            
-            sql_create = """CREATE TABLE IF NOT EXISTS exames (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                data TEXT,
-                medico TEXT,
-                exam TEXT,
-                dose_mgy TEXT,
-                tempo TEXT,
-                dap TEXT,
-                paciente_id TEXT,
-                sexo TEXT,
-                sala TEXT
-            )"""
-            db.inicializar_tipos_exames() 
-            db.inicializar_equipamento()
-            atualizar_dropdowns_globais()
-            
-            cursor.execute(sql_create)
-            conn.commit()
-            conn.close()
-            
-            db.criar_indices()
-            atualizar_tudo()
-            page.show_dialog(ft.SnackBar(ft.Text(f"Arquivo Selecionado: {state.FILE_PATH}"), bgcolor="green"))
-        else:
-            page.update()
+    # --- HANDLERS PARA BAIXAR GRÁFICOS (WEB E DESKTOP) ---
+    async def baixar_grafico_evolucao(e):
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+        sucesso = salvar_grafico_evolucao(caminho_oculto=temp_file)
+        if sucesso:
+            with open(temp_file, "rb") as f: img_bytes = f.read()
+            os.unlink(temp_file) # Apaga o arquivo temporário do servidor
+            await ft.FilePicker().save_file(file_name=f"Evolucao_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png", allowed_extensions=["png"], src_bytes=img_bytes)
 
-    async def handle_get_directory_path_evolucao(e: ft.Event[ft.Button]):
-        state.directory_path = await ft.FilePicker().get_directory_path()
-        if state.directory_path:
-            salvar_grafico_evolucao()
-        else:
-            page.update()
+    async def baixar_grafico_dose_medico(e):
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+        sucesso = salvar_grafico_dose_medico(caminho_oculto=temp_file)
+        if sucesso:
+            with open(temp_file, "rb") as f: img_bytes = f.read()
+            os.unlink(temp_file)
+            await ft.FilePicker().save_file(file_name=f"Dose_Medico_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png", allowed_extensions=["png"], src_bytes=img_bytes)
 
-    async def handle_get_directory_path_dose_medico(e: ft.Event[ft.Button]):
-        state.directory_path = await ft.FilePicker().get_directory_path()
-        if state.directory_path:
-            salvar_grafico_dose_medico()
-        else:
-            page.update()
+    async def baixar_grafico_tempo_medico(e):
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+        sucesso = salvar_grafico_tempo_medico(caminho_oculto=temp_file)
+        if sucesso:
+            with open(temp_file, "rb") as f: img_bytes = f.read()
+            os.unlink(temp_file)
+            await ft.FilePicker().save_file(file_name=f"Tempo_Medico_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png", allowed_extensions=["png"], src_bytes=img_bytes)
 
-    async def handle_get_directory_path_tempo_medico(e: ft.Event[ft.Button]):
-        state.directory_path = await ft.FilePicker().get_directory_path()
-        if state.directory_path:
-            salvar_grafico_tempo_medico()
-        else:
-            page.update()
+    async def baixar_grafico_dose_exame(e):
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+        sucesso = salvar_grafico_dose_exame(caminho_oculto=temp_file)
+        if sucesso:
+            with open(temp_file, "rb") as f: img_bytes = f.read()
+            os.unlink(temp_file)
+            await ft.FilePicker().save_file(file_name=f"Dose_Exame_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png", allowed_extensions=["png"], src_bytes=img_bytes)
 
-    async def handle_get_directory_path_dose_exame(e: ft.Event[ft.Button]):
-        state.directory_path = await ft.FilePicker().get_directory_path()
-        if state.directory_path:
-            salvar_grafico_dose_exame()
-        else:
-            page.update()
-
-    async def handle_get_directory_path_tempo_exame(e: ft.Event[ft.Button]):
-        state.directory_path = await ft.FilePicker().get_directory_path()
-        if state.directory_path:
-            salvar_grafico_tempo_exame()
-        else:
-            page.update()
+    async def baixar_grafico_tempo_exame(e):
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+        sucesso = salvar_grafico_tempo_exame(caminho_oculto=temp_file)
+        if sucesso:
+            with open(temp_file, "rb") as f: img_bytes = f.read()
+            os.unlink(temp_file)
+            await ft.FilePicker().save_file(file_name=f"Tempo_Exame_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png", allowed_extensions=["png"], src_bytes=img_bytes)
  
-    async def handle_get_directory_path_upload(e: ft.Event[ft.Button]):
-        state.upload_path = await ft.FilePicker().get_directory_path()
-        if state.upload_path:
-            # 1. Avisa que começou (opcional, deixa a interface mais amigável)
-            page.show_dialog(ft.SnackBar(ft.Text("Lendo arquivos DICOM, aguarde..."), bgcolor="blue"))
-            page.update()
+    async def sincronizar_servidor(e):
+        pasta_alvo = state.DICOM_FOLDER
+        
+        # 1. Verifica se tem algo na pasta
+        if not os.path.exists(pasta_alvo) or not os.listdir(pasta_alvo):
+            page.show_dialog(ft.SnackBar(ft.Text("A caixa de entrada do servidor está vazia!"), bgcolor="orange"))
+            return
 
-            # 2. Chama o nosso novo módulo isolado
-            qtd_sucesso, qtd_erros = dicom_parser.processar_diretorio_dicom(state.upload_path)
-
-            # 3. Atualiza a tabela com os novos dados
-            atualizar_tudo()
-
-            # 4. Dá o feedback final com a contagem exata
-            if qtd_erros > 0:
-                msg = f"Importação: {qtd_sucesso} lidos, {qtd_erros} erros (ver terminal)."
-                cor = "orange"
-            else:
-                msg = f"Importação Finalizada! {qtd_sucesso} arquivos lidos com sucesso."
-                cor = "green"
-
-            page.show_dialog(ft.SnackBar(ft.Text(msg), bgcolor=cor))
+        page.show_dialog(ft.SnackBar(ft.Text("Lendo arquivos DICOM no servidor, aguarde..."), bgcolor="blue"))
+        
+        # 2. Processa tudo
+        qtd_sucesso, qtd_erros = dicom_parser.processar_diretorio_dicom(pasta_alvo)
+        
+        # 3. Limpeza: Apaga os arquivos que já foram lidos
+        for nome_arquivo in os.listdir(pasta_alvo):
+            caminho_arq = os.path.join(pasta_alvo, nome_arquivo)
+            if os.path.isfile(caminho_arq):
+                try:
+                    os.remove(caminho_arq)
+                except Exception as err:
+                    print(f"Erro ao apagar {nome_arquivo}: {err}")
+                    
+        # 4. Atualiza os gráficos da tela
+        atualizar_tudo()
+        
+        # 5. Feedback visual
+        if qtd_erros > 0:
+            msg = f"Sincronização: {qtd_sucesso} lidos, {qtd_erros} erros. Arquivos apagados."
+            cor = "orange"
         else:
-            page.update()
+            msg = f"Sucesso! {qtd_sucesso} exames sincronizados e apagados da pasta."
+            cor = "green"
+            
+        page.show_dialog(ft.SnackBar(ft.Text(msg), bgcolor=cor))
 
     # --- handle CSV ---
 
     async def exportar_csv_completo(e: ft.Event[ft.Button]):
         texto_csv = gerar_csv_string(apenas_filtrados=False)
         nome_arquivo = f"Relatorio_Completo_{datetime.datetime.now().strftime('%Y%m%d')}.csv"
-        resultado = await ft.FilePicker().save_file(file_name=nome_arquivo, allowed_extensions=["csv"])
         
-        if resultado:
-            try:
-                with open(resultado, 'w', newline='', encoding='utf-8-sig') as f:
-                    f.write(texto_csv)
-                page.show_dialog(ft.SnackBar(ft.Text("Relatório completo salvo!"), bgcolor="green"))
-            except Exception as ex:
-                page.show_dialog(ft.SnackBar(ft.Text(f"Erro: {ex}"), bgcolor="red"))
+        try:
+            # 1. Converte o texto da string para Bytes
+            bytes_csv = texto_csv.encode('utf-8-sig')
+            
+            # 2. Entrega os bytes direto para o Flet (ele faz o download sozinho!)
+            await ft.FilePicker().save_file(
+                file_name=nome_arquivo, 
+                allowed_extensions=["csv"],
+                src_bytes=bytes_csv
+            )
+            page.show_dialog(ft.SnackBar(ft.Text("Download iniciado com sucesso!"), bgcolor="green"))
+        except Exception as ex:
+            page.show_dialog(ft.SnackBar(ft.Text(f"Erro: {ex}"), bgcolor="red"))
 
     async def exportar_csv_filtrado(e: ft.Event[ft.Button]):
         filtros_atuais = {
@@ -210,14 +224,16 @@ def main(page: ft.Page):
 
         nome_arquivo = f"Relatorio_Filtrado_{datetime.datetime.now().strftime('%Y%m%d')}.csv"
         
-        resultado = await ft.FilePicker().save_file(file_name=nome_arquivo, allowed_extensions=["csv"])   
-        if resultado:
-            try:
-                with open(resultado, 'w', newline='', encoding='utf-8-sig') as f:
-                    f.write(texto_csv)
-                page.show_dialog(ft.SnackBar(ft.Text("Relatório filtrado salvo!"), bgcolor="green"))
-            except Exception as ex:
-                page.show_dialog(ft.SnackBar(ft.Text(f"Erro: {ex}"), bgcolor="red"))
+        try:
+            bytes_csv = texto_csv.encode('utf-8-sig')
+            await ft.FilePicker().save_file(
+                file_name=nome_arquivo, 
+                allowed_extensions=["csv"],
+                src_bytes=bytes_csv
+            )
+            page.show_dialog(ft.SnackBar(ft.Text("Download iniciado com sucesso!"), bgcolor="green"))
+        except Exception as ex:
+            page.show_dialog(ft.SnackBar(ft.Text(f"Erro: {ex}"), bgcolor="red"))
 
     # --- Hendler Para montar Relatório (PDF) ---
 
@@ -229,8 +245,6 @@ def main(page: ft.Page):
         v_sexo, v_id_pac = sexo_entry.value, id_paciente_entry.value
 
         nome_sugerido = f"Relatorio_Dosimetria_{datetime.datetime.now().strftime('%Y%m%d')}.pdf"
-        filepath = await ft.FilePicker().save_file(file_name=nome_sugerido, allowed_extensions=["pdf"])
-        if not filepath: return
 
         try:
             conn = db.conectar()
@@ -329,8 +343,14 @@ def main(page: ft.Page):
                 pdf.cell(25, 8, ds, border=1)
                 pdf.set_text_color(0, 0, 0); pdf.set_font("helvetica", "", 9)
                 pdf.cell(25, 8, str(row[4])[:8] if row[4] else "N/A", border=1, new_x="LMARGIN", new_y="NEXT")
+            
+            pdf_bytes = pdf.output()
+            await ft.FilePicker().save_file(
+                file_name=nome_sugerido, 
+                allowed_extensions=["pdf"],
+                src_bytes=bytes(pdf_bytes)
+            )
 
-            pdf.output(filepath)
             page.show_dialog(ft.SnackBar(ft.Text("Relatório PDF gerado com sucesso!"), bgcolor="green"))
 
         except Exception as err:
@@ -454,7 +474,7 @@ def main(page: ft.Page):
 
         if tipo == "Evolução Temporal (Linha)":
             titulo_grafico = "Evolução Temporal (Exames/Dia)"
-            funcao_salvar = handle_get_directory_path_evolucao
+            funcao_salvar = baixar_grafico_evolucao
             
             dados_evo, modo_mult_evo = analytics.calcular_evolucao_temporal(state.data_inicio, state.data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
             
@@ -510,28 +530,28 @@ def main(page: ft.Page):
 
         elif tipo == "Média de Dose por Médico":
             titulo_grafico = "Média Dose/Médico"
-            funcao_salvar = handle_get_directory_path_dose_medico
+            funcao_salvar = baixar_grafico_dose_medico
             res = analytics.calcular_media_medico(state.data_inicio, state.data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
             charts_ui.popular_grafico_simples(res, grafico_barras, [ft.Colors.GREEN, ft.Colors.BLUE, ft.Colors.RED, ft.Colors.ORANGE, ft.Colors.PURPLE])
             grafico_obj = grafico_barras
 
         elif tipo == "Média de Tempo por Médico":
             titulo_grafico = "Média Tempo/Médico"
-            funcao_salvar = handle_get_directory_path_tempo_medico
+            funcao_salvar = baixar_grafico_tempo_medico
             res = analytics.calcular_media_tempo_medico(state.data_inicio, state.data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
             charts_ui.popular_grafico_simples(res, grafico_tempo, [ft.Colors.DEEP_ORANGE, ft.Colors.INDIGO, ft.Colors.AMBER], " min")
             grafico_obj = grafico_tempo
 
         elif tipo == "Média de Dose por Exame":
             titulo_grafico = "Média Dose/Exame"
-            funcao_salvar = handle_get_directory_path_dose_exame
+            funcao_salvar = baixar_grafico_dose_exame
             res, modo_mult = analytics.calcular_media_exame(state.data_inicio, state.data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
             charts_ui.popular_grafico_agrupado(res, grafico_exame, modo_mult, [ft.Colors.BLUE, ft.Colors.RED, ft.Colors.GREEN])
             grafico_obj = grafico_exame
 
         elif tipo == "Média de Tempo por Exame":
             titulo_grafico = "Média Tempo/Exame"
-            funcao_salvar = handle_get_directory_path_tempo_exame
+            funcao_salvar = baixar_grafico_tempo_exame
             res, modo_mult = analytics.calcular_media_tempo_exame(state.data_inicio, state.data_final, v_min, v_max, v_med, v_exm, v_min_t, v_max_t, v_min_dap, v_max_dap, v_sala, v_sexo, v_id_pac)
             charts_ui.popular_grafico_agrupado(res, grafico_tempo_exame, modo_mult, [ft.Colors.BROWN, ft.Colors.CYAN, ft.Colors.LIME], " min")
             grafico_obj = grafico_tempo_exame
@@ -920,7 +940,7 @@ def main(page: ft.Page):
     btn_limpar = ft.FilledButton("Limpar", on_click=limpar_filtros, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY))
     def abrir_cal(e): drp.open=True; page.update()
     btn_calendar = ft.Button("Data", icon=ft.Icons.EDIT_CALENDAR, on_click=abrir_cal)
-    btn_upload = ft.Button("Upload", icon=ft.Icons.UPLOAD, on_click=handle_get_directory_path_upload)
+    btn_upload = ft.Button("Upload", icon=ft.Icons.UPLOAD, on_click=sincronizar_servidor)
     btn_config_exames = ft.IconButton(
         icon=ft.Icons.SETTINGS, 
         tooltip="Adicionar/Remover Tipos de Exames", 
@@ -974,13 +994,12 @@ def main(page: ft.Page):
     btn_add = ft.FilledButton("Adicionar", icon=ft.Icons.ADD, style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE), on_click=open_add_dialog)
     btn_edit = ft.FilledButton("Editar", icon=ft.Icons.EDIT, style=ft.ButtonStyle(bgcolor=ft.Colors.ORANGE, color=ft.Colors.WHITE), on_click=open_edit_ask_id)
     btn_rem = ft.FilledButton("Remover", icon=ft.Icons.DELETE, style=ft.ButtonStyle(bgcolor=ft.Colors.RED, color=ft.Colors.WHITE), on_click=open_del_dialog)
-    btn_file = ft.Button(content="Selecionar Data Base", icon=ft.Icons.UPLOAD_FILE, on_click=handle_pick_files,)
     btn_tema = ft.IconButton(icon=ft.Icons.DARK_MODE, on_click=toggle_tema, tooltip="Alternar Tema")
 
     # Layout das Linhas de Filtro
     linha_1 = ft.Row(controls=[min_dose, max_dose, ft.VerticalDivider(), min_dap_entry, max_dap_entry, ft.VerticalDivider(), min_tempo_entry, max_tempo_entry, ft.VerticalDivider()], scroll=ft.ScrollMode.ADAPTIVE)
     linha_2 = ft.Row(controls=[medico_entry, ft.Row([exame_entry, btn_config_exames], spacing=0), ft.VerticalDivider(), ft.Row([sala_entry, btn_config_equipamento], spacing=0), ft.VerticalDivider(), sexo_entry, id_paciente_entry, btn_calendar, txt_datas,], scroll=ft.ScrollMode.ADAPTIVE)   
-    linha_3 = ft.Row(controls=[btn_file, btn_filtrar, btn_limpar, btn_upload, btn_apoio, selecao_grafico, btn_tema, btn_toggle_filtros], scroll=ft.ScrollMode.ADAPTIVE)
+    linha_3 = ft.Row(controls=[btn_filtrar, btn_limpar, btn_upload, btn_apoio, selecao_grafico, btn_tema, btn_toggle_filtros], scroll=ft.ScrollMode.ADAPTIVE)
 
     # Layout Conteúdo Tabela
     conteudo_tabela = ft.Column(
@@ -1021,4 +1040,4 @@ def main(page: ft.Page):
     atualizar_tudo()
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.run(main, view=ft.AppView.WEB_BROWSER, port=8550, upload_dir="data/dicom_inbox")

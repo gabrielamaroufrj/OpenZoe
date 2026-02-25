@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  openzoe:
+    build: .
+    container_name: openzoe_app
+    ports:
+      - "8550:8550"
+    volumes:
+      # Mapeia a pasta "data" do seu ZimaOS para dentro do Docker
+      # É aqui que você vai jogar os arquivos DICOM pela rede!
+      - ./data:/app/data
+    restart: unless-stopped
