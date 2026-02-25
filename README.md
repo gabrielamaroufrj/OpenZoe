@@ -62,31 +62,24 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 
 ---
 
-## 🚀 Como Rodar o Projeto
+## 🏥 Instalação em Servidores (Versão Docker)
+
+Esta versão foi arquitetada para rodar de forma contínua (24/7) em servidores hospitalares, NAS ou máquinas Linux dedicadas. A utilização do Docker garante isolamento das dependências, estabilidade e atualização simplificada.
 
 ### Pré-requisitos
-* Python 3.10 ou superior instalado.
+* Servidor Linux (Ubuntu, Debian, ZimaOS, TrueNAS, etc.).
+* [Docker](https://docs.docker.com/get-docker/) e [Docker Compose](https://docs.docker.com/compose/install/) instalados no servidor.
 
-### Passo a Passo
+### Passo a Passo de Instalação
 
-1. **Crie uma venv (Recomendado):**
-   ```bash
-   python -m venv .venv  
-   source .venv/bin/activate
+**1. Posicione os arquivos no servidor**
+Clone este repositório ou transfira os arquivos do projeto para uma pasta no armazenamento principal do seu servidor (exemplo: `/DATA/openzoe` ou `/opt/openzoe`).
 
-2. **Instale as bibliotecas:**
-   ```bash
-   pip install 'flet[all]'
-   pip install flet_charts
-   pip install matplotlib
-   pip install pydicom
-   pip install fpdf2
+**2. Entenda a persistência de dados**
+O arquivo `docker-compose.yml` já está pré-configurado para criar um volume seguro. O sistema gerará automaticamente uma pasta local chamada `data/`, onde seu banco de dados SQLite (`openzoe.db`) e o diretório de entrada DICOM ficarão salvos. **Seus dados não serão perdidos se o container for atualizado ou reiniciado.**
 
-3. **Clone o repositório:**
-   ```bash
-   git clone https://github.com/gabrielamaroufrj/OpenZoe.git
-   cd OpenZoe
+**3. Construa e inicie o container**
+Abra o terminal do servidor via SSH, navegue até a pasta onde os arquivos estão localizados e execute o comando abaixo para construir a imagem e rodar o serviço em segundo plano:
 
-4. **Rode o main.py:**
-   ```bash
-   python main.py
+```bash
+sudo docker compose up -d --build
