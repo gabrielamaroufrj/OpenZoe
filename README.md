@@ -1,7 +1,6 @@
 ![OpenZoe](assets/icon.png)
-# ☢️ OpenZoe Doscker
+# ☢️ OpenZoe Docker
 
-![Dashboard do OpenZoe](https://github.com/gabrielamaroufrj/OpenZoe/blob/aea56ca446c7c20a798d3ce674d2186c6f629420/docs/evolucao_temporal.png)
 ![Status](https://img.shields.io/badge/Status-Em_Desenvolvimento-yellow)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 [![AppImage](https://img.shields.io/badge/AppImage-Linux-blue?style=for-the-badge&logo=appimage&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/releases)
@@ -32,7 +31,6 @@ Visualização intuitiva na tabela de dados com **código de cores** para nívei
 * 🟡 **3000 - 3999 mGy:** Alerta Amarelo
 * 🟠 **4000 - 4999 mGy:** Alerta Laranja
 * 🔴 **≥ 5000 mGy:** Alerta Vermelho (Nível Crítico)
-![Dashboard do OpenZoe](https://github.com/gabrielamaroufrj/OpenZoe/blob/aea56ca446c7c20a798d3ce674d2186c6f629420/docs/dados.png)
 
 ### 3. 📊 Dashboards Interativos
 Visualização gráfica para tomada de decisão rápida:
@@ -41,7 +39,7 @@ Visualização gráfica para tomada de decisão rápida:
 * **Análise por Procedimento:** Média de dose e tempo por tipo de exame.
 * **Linhas de Referência:** Indicadores visuais nos gráficos para limites de controle (ex: 1000 mGy).
 * **Exportação:** Salve os gráficos gerados como imagem (PNG) de alta resolução.
-![Gráficos OpenZoe](https://github.com/gabrielamaroufrj/OpenZoe/blob/aea56ca446c7c20a798d3ce674d2186c6f629420/docs/dose_exame.png)
+* 
 ### 4. ⚙️ Gestão e Configuração
 * **Banco de Dados Local (SQLite):** Armazenamento seguro sem necessidade de servidores complexos.
 * **CRUD Completo:** Adicione, edite ou remova registros manualmente se necessário.
