@@ -1,6 +1,6 @@
 services:
   openzoe:
-    image: SEU_USUARIO/openzoe:latest
+    image: openzoe/openzoe:latest
     container_name: openzoe_app
     ports:
       - "8550:8550"
