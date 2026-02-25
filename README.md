@@ -1,5 +1,5 @@
 ![OpenZoe](assets/icon.png)
-# ☢️ OpenZoe
+# ☢️ OpenZoe Doscker
 
 ![Dashboard do OpenZoe](https://github.com/gabrielamaroufrj/OpenZoe/blob/aea56ca446c7c20a798d3ce674d2186c6f629420/docs/evolucao_temporal.png)
 ![Status](https://img.shields.io/badge/Status-Em_Desenvolvimento-yellow)
@@ -10,7 +10,7 @@
 
 > **Sistema de Gerenciamento e Análise de Doses em Radiologia (DICOM SR)**
 
-O **OpenZoe** é uma aplicação desktop desenvolvida para auxiliar Físicos Médicos e profissionais de radiologia no monitoramento de doses de radiação. O sistema processa arquivos **DICOM SR (Structured Report)**, centraliza os dados em um banco local e oferece ferramentas visuais para análise de indicadores de qualidade e segurança do paciente.
+O **OpenZoe** é uma aplicação desktop desenvolvida para auxiliar Físicos Médicos e profissionais de radiologia no monitoramento de doses de radiação. O sistema processa arquivos **DICOM SR (Structured Report)**, centraliza os dados em um banco local e oferece ferramentas visuais para análise de indicadores de qualidade e segurança do paciente. Esta versão foi alterada para rodar diretamente em servidores linux via container docker.
 
 ---
 
