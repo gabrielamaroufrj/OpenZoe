@@ -3,9 +3,9 @@ import sqlite3
 from config import state
 
 def conectar():
-    if not state.FILE_PATH: 
-        return None
-    return sqlite3.connect(state.FILE_PATH)
+    conn = sqlite3.connect(state.FILE_PATH)
+    conn.execute("PRAGMA journal_mode=WAL;") 
+    return conn
 
 def montar_query_filtros(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac):
     sql_base = " FROM exames WHERE 1=1"
