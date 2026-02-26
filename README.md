@@ -93,7 +93,7 @@ docker compose up -d
 Com o sistema rodando, abra o navegador em qualquer computador conectado à mesma rede do servidor e acesse:
 👉 http://<IP_DO_SEU_SERVIDOR>:8550
 
-## 🏥 Instalação em Servidores (Versão Docker)
+## 🏥 Instalação em Servidores [Versão Docker (Para desenvolvedores)]
 
 Esta versão foi arquitetada para rodar de forma contínua (24/7) em servidores hospitalares, NAS ou máquinas Linux dedicadas. A utilização do Docker garante isolamento das dependências, estabilidade e atualização simplificada.
 
@@ -101,7 +101,7 @@ Esta versão foi arquitetada para rodar de forma contínua (24/7) em servidores 
 * Servidor Linux (Ubuntu, Debian, ZimaOS, TrueNAS, etc.).
 * [Docker](https://docs.docker.com/get-docker/) e [Docker Compose](https://docs.docker.com/compose/install/) instalados no servidor.
 
-### Passo a Passo de Instalação (Para desenvolvedores)
+### Passo a Passo de Instalação 
 
 **1. Posicione os arquivos no servidor**
 Clone este repositório ou transfira os arquivos do projeto para uma pasta no armazenamento principal do seu servidor (exemplo: `/DATA/openzoe` ou `/opt/openzoe`).
