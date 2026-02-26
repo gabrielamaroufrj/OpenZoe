@@ -59,6 +59,39 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 * **FPDF:** Gerador de PDFs
 
 ---
+## 🚀 Instalação Rápida (Para Usuários Finais)
+
+A maneira mais fácil, rápida e segura de instalar o **OpenZoe** em seu hospital ou clínica é utilizando a nossa imagem oficial no Docker Hub. Você não precisa baixar o código-fonte ou saber programar para colocar o sistema no ar.
+
+### Pré-requisitos
+* Um computador, servidor ou NAS com **Docker** e **Docker Compose** instalados.
+
+### Passo 1: Criar o arquivo de configuração
+Crie uma nova pasta no seu servidor (por exemplo, `openzoe`). Dentro dela, crie um arquivo chamado `docker-compose.yml` e cole o código exato abaixo:
+
+```yaml
+services:
+  openzoe:
+    image: openzoe/openzoe:latest
+    container_name: openzoe_app
+    ports:
+      - "8550:8550" # Interface Web (Painel de Controle)
+      - "4242:4242" # Nó DICOM (Recepção invisível de exames)
+    volumes:
+      - ./openzoe_data:/app/data # Banco de dados e arquivos salvos com segurança
+    restart: unless-stopped
+```
+## Passo 2: Ligar o sistema
+Abra o seu terminal, navegue até a pasta onde você salvou o arquivo docker-compose.yml e execute o comando:
+
+```bash
+docker compose up -d
+```
+
+## Passo 3: Acessar o Painel Web
+
+Com o sistema rodando, abra o navegador em qualquer computador conectado à mesma rede do servidor e acesse:
+👉 http://<IP_DO_SEU_SERVIDOR>:8550
 
 ## 🏥 Instalação em Servidores (Versão Docker)
 
@@ -68,7 +101,7 @@ Esta versão foi arquitetada para rodar de forma contínua (24/7) em servidores 
 * Servidor Linux (Ubuntu, Debian, ZimaOS, TrueNAS, etc.).
 * [Docker](https://docs.docker.com/get-docker/) e [Docker Compose](https://docs.docker.com/compose/install/) instalados no servidor.
 
-### Passo a Passo de Instalação
+### Passo a Passo de Instalação (Para desenvolvedores)
 
 **1. Posicione os arquivos no servidor**
 Clone este repositório ou transfira os arquivos do projeto para uma pasta no armazenamento principal do seu servidor (exemplo: `/DATA/openzoe` ou `/opt/openzoe`).
@@ -81,3 +114,5 @@ Abra o terminal do servidor via SSH, navegue até a pasta onde os arquivos estã
 
 ```bash
 sudo docker compose up -d --build
+```
+
