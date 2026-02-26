@@ -1,5 +1,5 @@
 """
-OpenZoe v1.0.3
+OpenZoe Docker v1.0.0
 ------------------
 Sistema de gerenciamento e análise de doses radiológicas baseado em arquivos DICOM SR.
 Desenvolvido com Python, Flet, SQLite, Pydicom e Matplotlib.
