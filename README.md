@@ -90,3 +90,7 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 4. **Rode o main.py:**
    ```bash
    python main.py
+
+
+## OpenZoe Docker !!!
+https://github.com/gabrielamaroufrj/OpenZoe/tree/main_server
