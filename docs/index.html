@@ -96,6 +96,18 @@
             background-color: #f1f5f9;
         }
 
+        .btn-accent {
+            background-color: #10b981; /* Verde esmeralda / Online */
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-accent:hover {
+            background-color: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+
         /* Plataformas disponíveis */
         .platforms { font-size: 0.9em; color: var(--text-light); font-weight: 600;}
 
@@ -166,8 +178,17 @@
         <p class="subtitle">O seu software Open Source para gerenciamento e dosimetria em radiologia. Controle doses, gere gráficos e exporte relatórios de forma simples e gratuita.</p>
         
         <div class="button-group">
-            <a href="https://github.com/gabrielamaroufrj/OpenZoe/releases" class="btn btn-primary">Baixar (Grátis)</a>
-            <a href="https://github.com/gabrielamaroufrj/OpenZoe" class="btn btn-outline">Ver no GitHub</a>
+            <a href="https://openzoe.onrender.com/" target="_blank" class="btn btn-accent">
+                🟢 Testar Online Agora
+            </a>
+            
+            <a href="https://github.com/gabrielamaroufrj/OpenZoe/releases" class="btn btn-primary">
+                Baixar (Grátis)
+            </a>
+            
+            <a href="https://github.com/gabrielamaroufrj/OpenZoe" class="btn btn-outline">
+                Ver no GitHub
+            </a>
         </div>
         
         <p class="platforms">💻 Disponível para Windows e Linux (Docker)</p>
