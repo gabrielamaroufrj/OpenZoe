@@ -90,3 +90,12 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 4. **Rode o main.py:**
    ```bash
    python main.py
+   
+## 🚀 Agradeciementos:
+
+  Esse projeto não seria possível sem a ajuda dos Físicos Médicos do Hospital Universitário Antônio Pedro - HUAP - UFF - EBSERH:
+  Diego Mendes dos Santos - https://www.linkedin.com/in/diegostd/?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=ios_app
+  Ryenne Bañolas Bueno - https://www.linkedin.com/in/ryenne-ba%C3%B1olas-bueno-283095a3/?utm_source=share_via&utm_content=profile&utm_medium=member_ios
+
+## 🩷 Apoie o projeto:
+[![Apoie com Pix](https://img.shields.io/badge/Apoie%20com-Pix-32BCAD?style=for-the-badge&logo=pix&logoColor=white)](https://github.com/gabrielamaroufrj/OpenZoe/blob/aea56ca446c7c20a798d3ce674d2186c6f629420/docs/PIX.md)
