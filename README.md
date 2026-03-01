@@ -90,7 +90,11 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 4. **Rode o main.py:**
    ```bash
    python main.py
-   
+
+## OpenZoe Docker: (Em desenvolvimento)
+  Teste a versão docker do OpenZoe diretamente em seu servidor
+  https://github.com/gabrielamaroufrj/OpenZoe/tree/main_server
+
 ## 🚀 Agradeciementos:
 
   Este projeto não seria possível sem a ajuda dos Físicos Médicos do Hospital Universitário Antônio Pedro - HUAP - UFF - EBSERH:
