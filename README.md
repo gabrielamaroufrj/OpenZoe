@@ -94,7 +94,9 @@ O projeto foi desenvolvido inteiramente em **Python**, utilizando as seguintes b
 ## 🚀 Agradeciementos:
 
   Esse projeto não seria possível sem a ajuda dos Físicos Médicos do Hospital Universitário Antônio Pedro - HUAP - UFF - EBSERH:
+  
   Diego Mendes dos Santos - https://www.linkedin.com/in/diegostd/?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=ios_app
+  
   Ryenne Bañolas Bueno - https://www.linkedin.com/in/ryenne-ba%C3%B1olas-bueno-283095a3/?utm_source=share_via&utm_content=profile&utm_medium=member_ios
 
 ## 🩷 Apoie o projeto:
