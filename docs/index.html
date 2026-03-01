@@ -3,42 +3,193 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenZoe - Gerenciador de Radiologia</title>
+    <title>OpenZoe - Gerenciador e Dosimetria em Radiologia</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; background-color: #f4f4f9; }
-        h1 { color: #2c3e50; }
-        .btn { background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 1.2em; }
-        .btn:hover { background-color: #0056b3; }
-        .footer { margin-top: 50px; font-size: 0.8em; color: #777; }
+        :root {
+            --primary-color: #0056b3; /* Azul médico/confiança */
+            --primary-hover: #003d82;
+            --text-main: #2c3e50;
+            --text-light: #5a6c7d;
+            --bg-color: #f8fafc;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            text-align: center; 
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color); 
+            color: var(--text-main);
+            line-height: 1.6;
+        }
+
+        /* Seção principal de impacto */
+        .hero {
+            padding: 80px 20px 40px;
+            background: linear-gradient(180deg, #ffffff 0%, var(--bg-color) 100%);
+        }
+
+        .logo {
+            width: 120px;
+            height: 120px;
+            border-radius: 20%;
+            box-shadow: 0 10px 25px rgba(0, 86, 179, 0.15);
+            margin-bottom: 20px;
+        }
+
+        h1 { 
+            font-weight: 800;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-light);
+            max-width: 600px;
+            margin: 0 auto 30px auto;
+        }
+
+        /* Grupo de botões */
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn { 
+            padding: 14px 32px; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            font-size: 1.1rem; 
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary { 
+            background-color: var(--primary-color); 
+            color: white; 
+            box-shadow: 0 4px 15px rgba(0, 86, 179, 0.3);
+        }
+
+        .btn-primary:hover { 
+            background-color: var(--primary-hover); 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 86, 179, 0.4);
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            color: var(--text-main);
+            border: 2px solid #cbd5e1;
+        }
+
+        .btn-outline:hover {
+            border-color: var(--text-main);
+            background-color: #f1f5f9;
+        }
+
+        /* Plataformas disponíveis */
+        .platforms { font-size: 0.9em; color: var(--text-light); font-weight: 600;}
+
+        /* Seção da Galeria */
+        .gallery-section {
+            padding: 40px 20px;
+        }
+
+        .gallery-section h2 {
+            margin-bottom: 30px;
+            font-size: 1.8rem;
+        }
+
+        .gallery-grid { 
+            display: flex; 
+            justify-content: center; 
+            gap: 25px; 
+            flex-wrap: wrap; 
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .gallery-grid img { 
+            width: 100%;
+            max-width: 45%; 
+            border-radius: 12px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease;
+            object-fit: cover;
+        }
+
+        .gallery-grid img:hover {
+            transform: scale(1.02);
+        }
+
+        /* Rodapé */
+        .footer { 
+            margin-top: 60px; 
+            padding: 30px;
+            background-color: #ffffff;
+            font-size: 0.9em; 
+            color: var(--text-light); 
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .footer a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsividade para celulares */
+        @media (max-width: 768px) {
+            .gallery-grid img { max-width: 90%; }
+            h1 { font-size: 2rem; }
+        }
     </style>
 </head>
 <body>
-    <img src="icon.png" alt="Logo OpenZoe" style="border-radius:50%">
-    <h1>Bem-vindo ao OpenZoe</h1>
-    <p>O seu software Open Source para gerenciamento e dosimetria em radiologia.</p>
-    <p>Controle doses, gere gráficos e exporte relatórios de forma simples e gratuita.</p>
-    
-    <br><br>
-    
-    <a href="https://github.com/gabrielamaroufrj/OpenZoe/releases" class="btn">Baixar (Grátis)</a>
-    <div class="footer">
-        <p>Disponível para Windows e Linux</p>
-    </div>
 
-    <h2>Veja o OpenZoe em ação</h2>
+    <main class="hero">
+        <img src="icon.png" alt="Logo OpenZoe" class="logo">
+        <h1>Bem-vindo ao OpenZoe</h1>
+        <p class="subtitle">O seu software Open Source para gerenciamento e dosimetria em radiologia. Controle doses, gere gráficos e exporte relatórios de forma simples e gratuita.</p>
+        
+        <div class="button-group">
+            <a href="https://github.com/gabrielamaroufrj/OpenZoe/releases" class="btn btn-primary">Baixar (Grátis)</a>
+            <a href="https://github.com/gabrielamaroufrj/OpenZoe" class="btn btn-outline">Ver no GitHub</a>
+        </div>
+        
+        <p class="platforms">💻 Disponível para Windows e Linux (Docker)</p>
+    </main>
 
-    <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
-        <img src="dados.png" alt="Tabela de Exames" width="45%" style="border: 1px solid #ccc; border-radius: 10px;">
-        <img src="evolucao_temporal.png" alt="Análise Gráfica" width="45%" style="border: 1px solid #ccc; border-radius: 10px;">
-        <img src="dose_exame.png" alt="Análise Gráfica" width="45%" style="border: 1px solid #ccc; border-radius: 10px;">
-        <img src="Dose_medico.png" alt="Análise Gráfica" width="45%" style="border: 1px solid #ccc; border-radius: 10px;">
-    </div>
+    <section class="gallery-section">
+        <h2>Veja o OpenZoe em ação</h2>
+        
+        <div class="gallery-grid">
+            <img src="dados.png" alt="Tabela de Exames">
+            <img src="evolucao_temporal.png" alt="Análise Gráfica Temporal">
+            <img src="dose_exame.png" alt="Análise Gráfica de Dose por Exame">
+            <img src="Dose_medico.png" alt="Análise Gráfica de Dose por Médico">
+        </div>
+        
+        <p style="margin-top: 30px; color: var(--text-light);"><em>Disponível em Modo Claro e Escuro para seu conforto visual.</em></p>
+    </section>
 
-<p><em>Disponível em Modo Claro e Escuro para seu conforto visual.</em></p>
-    
-    <div class="footer">
-        <p>Desenvolvido por Gabriel Amaro | Licença MIT</p>
-        <p><a href="https://github.com/gabrielamaroufrj/OpenZoe">Ver código fonte no GitHub</a></p>
-    </div>
+    <footer class="footer">
+        <p>Desenvolvido por <strong>Gabriel Amaro</strong> | Licença MIT</p>
+        <p>Criado com propósito para a área de Física Médica.</p>
+    </footer>
+
 </body>
 </html>
