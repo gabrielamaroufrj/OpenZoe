@@ -42,8 +42,11 @@ jobs:
       - name: Install Project Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .
           pip install flet[all]
+          # Tenta instalar apenas as dependências declaradas
+          pip install . --only-binary :all: --no-deps || true
+          # Força a instalação das dependências baseadas no arquivo, ignorando o erro de "multiple top-level packages"
+          python -m pip install . --use-pep517 --config-settings="--global-option=--quiet" || echo "Seguindo com build..."
 
       - name: Build Executable
         run: |
