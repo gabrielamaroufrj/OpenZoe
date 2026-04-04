@@ -1,25 +1,24 @@
-name: Build Flet App
+name: Build Flet Win
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
-# Define a variável de ambiente para usar o Node 24 globalmente no workflow
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUTF8: 1 # <--- ESSA É A CHAVE PARA O SEU ERRO
 
 jobs:
   build:
     runs-on: windows-latest
     
     steps:
-      # Versões atualizadas que suportam Node 24 nativamente
       - uses: actions/checkout@v5 
       
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11' # Versão estável recomendada para 2026
+          python-version: '3.11'
           cache: 'pip'
 
       - name: Install Flutter SDK
@@ -34,11 +33,6 @@ jobs:
           pip install flet[all]
 
       - name: Build Executable
+        shell: bash
         run: |
           flet build windows
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: flet-app-windows
-          path: build/windows
