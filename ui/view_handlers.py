@@ -1,4 +1,5 @@
 import flet as ft
+import flet_charts as fch
 import math
 from core import database as db
 from core import analytics
