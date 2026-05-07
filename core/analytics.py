@@ -129,3 +129,37 @@ def calcular_media_tempo_exame(data_inicio, data_fim, min_d, max_d, n_medico, ex
     except Exception as e:
         print(f"Erro Media Tempo Exame SQL: {e}")
         return [], False
+
+def calcular_resumo_kpis(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac):
+    try:
+        conn = db.conectar()
+        if not conn: return {"total": 0, "avg_dose": 0, "avg_tempo": 0, "avg_dap": 0}
+        cursor = conn.cursor()
+        sql_where, params = db.montar_query_filtros(data_inicio, data_fim, min_d, max_d, n_medico, exm, min_tempo, max_tempo, min_dap, max_dap, sala, sexo, id_pac)
+        
+        calc_minutos = "(CAST(substr(tempo, 1, 2) AS INTEGER) * 60 + CAST(substr(tempo, 4, 2) AS INTEGER) + CAST(substr(tempo, 7, 2) AS REAL)/60)"
+        
+        sql = f"""
+            SELECT 
+                COUNT(*), 
+                AVG(CAST(REPLACE(dose_mgy, ',', '.') AS REAL)),
+                AVG({calc_minutos}),
+                AVG(CAST(REPLACE(dap, ',', '.') AS REAL))
+            {sql_where}
+        """
+        cursor.execute(sql, params)
+        res = cursor.fetchone()
+        conn.close()
+        
+        if not res or res[0] == 0:
+            return {"total": 0, "avg_dose": 0, "avg_tempo": 0, "avg_dap": 0}
+            
+        return {
+            "total": res[0],
+            "avg_dose": res[1] or 0,
+            "avg_tempo": res[2] or 0,
+            "avg_dap": res[3] or 0
+        }
+    except Exception as e:
+        print(f"Erro Resumo KPIs: {e}")
+        return {"total": 0, "avg_dose": 0, "avg_tempo": 0, "avg_dap": 0}

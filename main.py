@@ -22,7 +22,7 @@ from reports.pdf_export import RelatorioPDF
 from core import analytics
 from reports import charts_export
 from core.utils import formatar_data, formatar_tempo
-from ui import charts_ui, dialogs, forms, layouts, export_handlers, data_handlers, view_handlers
+from ui import charts_ui, dialogs, forms, layouts, export_handlers, data_handlers, view_handlers, styles
 
 # ==============================================================================
 #                           INTERFACE GRÁFICA (FLET)
@@ -232,12 +232,31 @@ def main(page: ft.Page):
 
     
     # --- FUNÇÃO PRINCIPAL DE ATUALIZAÇÃO DA TELA ---
-
+    
     def atualizar_apenas_tabela():
         inputs = get_current_inputs()
-        view_handlers.atualizar_apenas_tabela(
-            page, state, db, tabela, txt_paginacao, btn_anterior, btn_proximo, controles_paginacao, inputs
+        
+        # Atualizar KPIs
+        kpis = analytics.calcular_resumo_kpis(
+            state.data_inicio, state.data_final, 
+            inputs['min_dose'], inputs['max_dose'], inputs['medico'], inputs['exame'], 
+            inputs['min_tempo'], inputs['max_tempo'], inputs['min_dap'], inputs['max_dap'], 
+            inputs['sala'], inputs['sexo'], inputs['id_paciente']
         )
+        kpi_container.content = layouts.create_kpi_row(
+            f"{kpis['total']}", 
+            f"{kpis['avg_dose']:.2f}", 
+            f"{kpis['avg_tempo']:.1f}", 
+            f"{kpis['avg_dap']:.2f}"
+        )
+        kpi_row.update()
+
+
+        view_handlers.atualizar_apenas_tabela(
+            page, state, db, tabela, txt_paginacao, btn_anterior, btn_proximo, controles_paginacao, inputs, 
+            on_edit=open_edit_ask_id, on_delete=open_del_dialog
+        )
+
 
     def atualizar_apenas_graficos(e=None):
         inputs = get_current_inputs()
@@ -287,15 +306,22 @@ def main(page: ft.Page):
 
     dlg_add = dialogs.create_add_dialog(f_data, f_medico, f_exame, f_dose, f_tempo, f_dap, f_paciente_id, f_sexo, f_sala, salvar_adicao_handler, lambda e: page.pop_dialog())
 
-    def open_del_dialog(e): f_id_target.value = ""; page.show_dialog(dlg_del)
+    def open_del_dialog(id_target): 
+        f_id_target.value = str(id_target)
+        page.show_dialog(dlg_del)
+        page.update() # Ensure UI update
 
     def confirmar_remocao_handler(e):
         qtd, msg = data_handlers.confirmar_remocao(page, db, f_id_target, atualizar_tudo)
         page.show_dialog(ft.SnackBar(ft.Text(msg), bgcolor="green" if qtd > 0 else "red"))
+        page.pop_dialog()
 
     dlg_del = dialogs.create_del_dialog(f_id_target, confirmar_remocao_handler, lambda e: page.pop_dialog())
 
-    def open_edit_ask_id(e): f_id_target.value = ""; page.show_dialog(dlg_ask_edit)
+    def open_edit_ask_id(id_target): 
+        f_id_target.value = str(id_target)
+        carregar_para_editar_handler(None)
+    
     def carregar_para_editar_handler(e):
         data_handlers.carregar_para_editar(page, db, f_id_target, f_data, f_medico, f_exame, f_dose, f_tempo, f_dap, f_paciente_id, f_sexo, f_sala, dlg_form_edit)
 
@@ -405,10 +431,9 @@ def main(page: ft.Page):
     # Função para alternar visibilidade
     def toggle_filtros(e):
         # Inverte o estado atual (Se True vira False, se False vira True)
-        estado_atual = linha_1.visible
-        linha_1.visible = not estado_atual
-        linha_2.visible = not estado_atual
-        if linha_1.visible:
+        estado_atual = linha_filtros.visible
+        linha_filtros.visible = not estado_atual
+        if linha_filtros.visible:
             btn_toggle_filtros.icon = ft.Icons.VISIBILITY_OFF
             btn_toggle_filtros.tooltip = "Ocultar Filtros"
         else:
@@ -424,8 +449,8 @@ def main(page: ft.Page):
     txt_paginacao = ft.Text(f"Página {state.pagina_atual}")
     controles_paginacao = ft.Row(controls=[btn_anterior, txt_paginacao, btn_proximo], alignment=ft.MainAxisAlignment.CENTER)
 
-    btn_filtrar = ft.Button("Filtrar", icon=ft.Icons.SEARCH, on_click=acao_filtrar)
-    btn_limpar = ft.FilledButton("Limpar", on_click=limpar_filtros, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY))
+    btn_filtrar = ft.Button("Filtrar", icon=ft.Icons.SEARCH, on_click=acao_filtrar, style=styles.PRIMARY_BTN_STYLE)
+    btn_limpar = ft.Button("Limpar", on_click=limpar_filtros, style=styles.SECONDARY_BTN_STYLE)
     def abrir_cal(e): drp.open=True; page.update()
     btn_calendar = ft.Button("Data", icon=ft.Icons.EDIT_CALENDAR, on_click=abrir_cal)
     btn_upload = ft.Button("Upload", icon=ft.Icons.UPLOAD, on_click=handle_get_directory_path_upload)
@@ -479,18 +504,29 @@ def main(page: ft.Page):
         on_select=atualizar_apenas_graficos
     )
     # --- LAYOUT CRUD ---
-    btn_add = ft.FilledButton("Adicionar", icon=ft.Icons.ADD, style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE), on_click=open_add_dialog)
-    btn_edit = ft.FilledButton("Editar", icon=ft.Icons.EDIT, style=ft.ButtonStyle(bgcolor=ft.Colors.ORANGE, color=ft.Colors.WHITE), on_click=open_edit_ask_id)
-    btn_rem = ft.FilledButton("Remover", icon=ft.Icons.DELETE, style=ft.ButtonStyle(bgcolor=ft.Colors.RED, color=ft.Colors.WHITE), on_click=open_del_dialog)
+    btn_add = ft.FilledButton("Adicionar", icon=ft.Icons.ADD, style=styles.SUCCESS_BTN_STYLE, on_click=open_add_dialog)
+    btn_edit = ft.FilledButton("Editar", icon=ft.Icons.EDIT, style=ft.ButtonStyle(bgcolor=styles.WARNING_COLOR, color=ft.Colors.WHITE), on_click=open_edit_ask_id)
+    btn_rem = ft.FilledButton("Remover", icon=ft.Icons.DELETE, style=styles.DANGER_BTN_STYLE, on_click=open_del_dialog)
     btn_file = ft.Button(content="Selecionar Data Base", icon=ft.Icons.UPLOAD_FILE, on_click=handle_pick_files,)
     btn_tema = ft.IconButton(icon=ft.Icons.DARK_MODE, on_click=toggle_tema, tooltip="Alternar Tema")
 
     # Layout das Linhas de Filtro
-    linha_1, linha_2 = layouts.create_filter_rows(min_dose, max_dose, min_dap_entry, max_dap_entry, min_tempo_entry, max_tempo_entry, medico_entry, exame_entry, btn_config_exames, sala_entry, btn_config_equipamento, sexo_entry, id_paciente_entry, btn_calendar, txt_datas)
-    linha_3 = layouts.create_action_row(btn_file, btn_filtrar, btn_limpar, btn_upload, btn_apoio, selecao_grafico, btn_tema, btn_toggle_filtros)
+    linha_filtros, _ = layouts.create_filter_rows(min_dose, max_dose, min_dap_entry, max_dap_entry, min_tempo_entry, max_tempo_entry, medico_entry, exame_entry, btn_config_exames, sala_entry, btn_config_equipamento, sexo_entry, id_paciente_entry, btn_calendar, txt_datas)
+    
+    export_menu = layouts.create_export_menu(btn_csv_filter, btn_csv_full, btn_pdf)
+    linha_3 = layouts.create_action_row(btn_file, btn_filtrar, btn_limpar, btn_upload, btn_apoio, selecao_grafico, btn_tema, btn_toggle_filtros, export_menu)
 
     # Layout Conteúdo Tabela
-    conteudo_tabela = layouts.create_table_content(btn_add, btn_edit, btn_rem, tabela, controles_paginacao, btn_csv_filter, btn_csv_full, btn_pdf)
+    # Adicionando botão Remover ao lado de Adicionar junto aos KPIs
+    kpi_container = ft.Container(expand=True)
+    kpi_row = ft.Row(controls=[
+        kpi_container,
+        ft.Row([btn_add, btn_rem], alignment=ft.MainAxisAlignment.END)
+    ], expand=True)
+    conteudo_tabela = layouts.create_table_content(btn_add, btn_rem, tabela, controles_paginacao)
+    
+    # Adiciona KPI row ao topo do conteúdo da tabela
+    conteudo_tabela.controls.insert(0, kpi_row)
     
     # Layout Conteúdo Dashboard
     container_grafico_ativo = ft.Container(
@@ -515,7 +551,7 @@ def main(page: ft.Page):
             conteudo_dashboard.update()
 
     nav_bar = ft.NavigationBar(selected_index=0, on_change=trocar_aba, destinations=[ft.NavigationBarDestination(icon=ft.Icons.LIST_ALT, label="Dados"), ft.NavigationBarDestination(icon=ft.Icons.BAR_CHART, label="Dashboard")])
-    page.add( ft.Divider(), linha_1, linha_2, linha_3, ft.Divider(), ft.Column(controls=[conteudo_tabela, conteudo_dashboard], expand=True), nav_bar)
+    page.add( ft.Divider(), linha_filtros, linha_3, ft.Divider(), ft.Column(controls=[conteudo_tabela, conteudo_dashboard], expand=True), nav_bar)
     atualizar_tudo()
 
 if __name__ == "__main__":

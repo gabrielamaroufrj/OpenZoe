@@ -14,6 +14,7 @@ def criar_tabela_dados():
         ft.DataColumn(ft.Text("Sala")),
         ft.DataColumn(ft.Text(fr"DAP (μGym²)"), numeric=True),
         ft.DataColumn(ft.Text("Dose (mGy)"), numeric=True),
+        ft.DataColumn(ft.Text("Ações"), numeric=True),
     ]
     return ft.DataTable(
         columns=colunas, 

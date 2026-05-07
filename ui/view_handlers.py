@@ -3,10 +3,10 @@ import flet_charts as fch
 import math
 from core import database as db
 from core import analytics
-from ui import charts_ui
+from ui import charts_ui, styles
 from core.utils import formatar_data, formatar_tempo
 
-def atualizar_apenas_tabela(page, state, db_module, tabela, txt_paginacao, btn_anterior, btn_proximo, controles_paginacao, inputs):
+def atualizar_apenas_tabela(page, state, db_module, tabela, txt_paginacao, btn_anterior, btn_proximo, controles_paginacao, inputs, on_edit=None, on_delete=None):
     v_min, v_max = inputs['min_dose'], inputs['max_dose']
     v_min_t, v_max_t = inputs['min_tempo'], inputs['max_tempo']
     v_min_dap, v_max_dap = inputs['min_dap'], inputs['max_dap']
@@ -22,7 +22,7 @@ def atualizar_apenas_tabela(page, state, db_module, tabela, txt_paginacao, btn_a
     
     tabela.rows.clear()
     
-    for row in dados:
+    for i, row in enumerate(dados):
         try:
             valor_dose = float(str(row[4]).replace(',', '.'))
         except (ValueError, TypeError):
@@ -45,19 +45,31 @@ def atualizar_apenas_tabela(page, state, db_module, tabela, txt_paginacao, btn_a
             celula_dose = ft.Row([ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=color_icon, size=16), ft.Text(str(row[4]), color=color_text, weight="bold", selectable=True)], spacing=5)
         else:
             celula_dose = ft.Text(str(row[4]) if row[4] else "", selectable=True)
+        
+        # Row Actions
+        btn_edit_row = ft.IconButton(icon=ft.Icons.EDIT, icon_size=16, tooltip="Editar", on_click=lambda e, r_id=row[0]: on_edit(r_id) if on_edit else None)
+        btn_del_row = ft.IconButton(icon=ft.Icons.DELETE, icon_size=16, tooltip="Remover", icon_color=styles.DANGER_COLOR, on_click=lambda e, r_id=row[0]: on_delete(r_id) if on_delete else None)
+        celula_acoes = ft.Row([btn_edit_row, btn_del_row], alignment=ft.MainAxisAlignment.CENTER, spacing=0)
 
-        tabela.rows.append(ft.DataRow(cells=[
-            ft.DataCell(ft.Text(str(row[0]), weight="bold", selectable=True)),
-            ft.DataCell(ft.Text(formatar_data(row[1]), selectable=True)),
-            ft.DataCell(ft.Text(str(row[2])[:20] if row[2] else "", selectable=True)),
-            ft.DataCell(ft.Text(str(row[3]) if row[3] else "", selectable=True)),
-            ft.DataCell(ft.Text(str(formatar_tempo(row[5])) if row[5] else "", selectable=True)),
-            ft.DataCell(ft.Text(str(row[7]) if row[7] else "", selectable=True)),
-            ft.DataCell(ft.Text(str(row[8]) if row[8] else "", selectable=True)),
-            ft.DataCell(ft.Text(str(row[9]) if row[9] else "", selectable=True)),
-            ft.DataCell(ft.Text(str(float(row[6])) if row[6] else "", selectable=True)),
-            ft.DataCell(celula_dose),
-        ]))
+        # No zebra striping
+        row_color = None
+
+        tabela.rows.append(ft.DataRow(
+            cells=[
+                ft.DataCell(ft.Text(str(row[0]), weight="bold", selectable=True)),
+                ft.DataCell(ft.Text(formatar_data(row[1]), selectable=True)),
+                ft.DataCell(ft.Text(str(row[2])[:20] if row[2] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(row[3]) if row[3] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(formatar_tempo(row[5])) if row[5] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(row[7]) if row[7] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(row[8]) if row[8] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(row[9]) if row[9] else "", selectable=True)),
+                ft.DataCell(ft.Text(str(float(row[6])) if row[6] else "", selectable=True)),
+                ft.DataCell(celula_dose),
+                ft.DataCell(celula_acoes),
+            ],
+            color=row_color
+        ))
     
     total_paginas = math.ceil(total_registros / state.itens_por_pagina) if total_registros > 0 else 1
     txt_paginacao.value = f"Página {state.pagina_atual} de {total_paginas} (Total: {total_registros})"
